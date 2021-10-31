@@ -1,0 +1,27 @@
+epochs: 100      # number of epochs to train the encoder
+batch_size: 512  # batch size to use, when training the encoder
+log_every: 100   # frequency of the logging (steps)
+val_every: 5     # frequency of the validation (epochs)
+eval_every: 5    # frequency of the evaluation (epochs)
+
+model:
+  base_model: resnet50  # encoder baseline model
+  n_channels: 3         # number of input channels
+  out_dim: 128          # projection dimensions
+
+lr: 3e-4         # learning rate
+wd: 1e-4         # weight decay
+fine_tune_from:  # path to model, to fine tune from
+
+input_size: (64, 64, 3)     # image input size (H, W, C)
+comment: simclr_galaxy_zoo  # comment to use in tensorboard run folder
+
+loss:
+  temperature: 0.5             # temperature parameter for NTXentLoss
+  use_cosine_similarity: True  # if True, cosine similarity will be used, otherwise dot similarity is used
+
+dataset:
+  name: galaxy_zoo  # dataset name
+  path: <>          # path to folder with training images (both folders `images_test_rev1` and `images_training_rev1` are used)
+  test_path:        # path tp folder with images (images_training_rev1)
+  test_anno:        # path to annotations (training_solutions_rev1.csv), will be used for classification evaluation

@@ -2,6 +2,12 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python,pycharm,jupyternotebooks,images
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,pycharm,jupyternotebooks,images
 
+
+.idea/
+runs/
+results/
+models/GalaxyZoo
+
 ### Images ###
 # JPEG
 *.jpg

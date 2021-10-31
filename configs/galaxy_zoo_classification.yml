@@ -1,0 +1,25 @@
+batch_size: 512  # batch size to use, when training classifier
+epochs: 100      # number of training epochs
+
+wd: 1e-6  # weight decay
+lr: 3e-4  # learning rate
+
+fine_tune_from:  # path to model, to fine tune from
+
+model:              # classifier parameters
+  n_features: 2048  # number of input features
+  n_out: 37         # number of attributes
+
+dataset:            # dataset parameters
+  name: galaxy_zoo  # dataset name
+  path: <>          # path to folder with images
+  anno: <>          # path to file with annotations
+  size: 64          # image size
+
+encoder:                                   # encoder parameters
+  path: ./models/GalaxyZoo/galaxy_zoo.pth  # path to pretrained encoder
+  base_model: resnet50                     # encoder based model
+  n_channels: 3                            # number of image channels
+  out_dim: 128                             # z-projection size
+
+comment: galaxy_zoo_classification
