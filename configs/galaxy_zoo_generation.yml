@@ -12,14 +12,14 @@ n_workers: 8       # number of workers in dataloader
 lr: 1e-4           # learning rate
 fid: False         # if True, then FID will be calculated when saving checkpoint model
 
-fine_tune_from:  # path to model, to fine tune from
+fine_tune_from:  ./runs/GalaxyZoo/galaxy_zoo_generation_patch_4_non_saturating/checkpoint/0150000.pt  # path to model, to fine tune from
 
-loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsgan'
+loss: non_saturating  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsgan'
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: <>          # path to folder with images
-  anno: <>          # path to file with attribute annotations
+  path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1  # path to folder with images
+  anno: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv          # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
   n_channels: 3     # number of channels in image
@@ -40,9 +40,9 @@ generator:             # generator parameters
   y_type: real  # type of attributes. Choices: 'one_hot' and 'multi_label'
 
 discriminator:    # discriminator parameters
-  type: patch     # type of discriminator. Choices: 'oneclass' and 'patch'
+  type: patch     # type of discriminator. Choices: 'global' and 'patch'
   actnorm: False
   ndf: 64
   n_layers: 4
 
-comment: galaxy_zoo_generation_patch
+comment: galaxy_zoo_generation_patch_non_saturating_150k_eval
