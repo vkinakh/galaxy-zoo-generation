@@ -1,6 +1,5 @@
 from typing import Optional, Callable, List
 
-from torchvision import datasets
 from torch.utils.data import Dataset
 
 from src.data import GalaxyZooLabeledDataset

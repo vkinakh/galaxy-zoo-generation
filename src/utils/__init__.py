@@ -10,3 +10,6 @@ from .utils import get_feature_detector
 from .custom_types import PathOrStr
 
 from .tsne import tsne_display_tensorboard
+
+from .labeling import make_galaxy_labels_hierarchical
+
