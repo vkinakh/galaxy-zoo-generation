@@ -1,10 +1,12 @@
-from typing import Optional
+from typing import Optional, Dict
 import math
+import random
 
 import torch
 import torch.nn as nn
 
 from .blocks import EigenBlock, ConvLayer, SubspaceLayer
+from src.data import get_dataset
 
 
 class ConditionalGenerator(nn.Module):
@@ -15,6 +17,7 @@ class ConditionalGenerator(nn.Module):
     """
 
     def __init__(self,
+                 config: Dict,
                  size: int,
                  y_size: int,
                  z_size: int,
@@ -65,6 +68,18 @@ class ConditionalGenerator(nn.Module):
             nn.Tanh(),
         )
 
+        self._config = config
+        self._sample_ds = self._get_ds()
+
+    def _get_ds(self):
+
+        name = self._config['dataset']['name']
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        columns = None if 'columns' not in self._config['dataset'] else self._config['dataset']['columns']
+        dataset = get_dataset(name, path, anno_file=anno, columns=columns)
+        return dataset
+
     def forward(self,
                 y: torch.Tensor,
                 eps: Optional[torch.Tensor] = None,
@@ -92,6 +107,18 @@ class ConditionalGenerator(nn.Module):
             return out, concat
 
         return out
+
+    def sample(self, n: int) -> torch.Tensor:
+        device = self.get_device()
+
+        labels = []
+        for _ in range(n):
+            idx = random.randrange(len(self._sample_ds))
+            _, label = self._sample_ds[idx]
+            labels.append(torch.from_numpy(label))
+
+        labels = torch.stack(labels).to(device)
+        return self.forward(labels)
 
     def sample_zs(self, batch: int, truncation: float = 1.):
         device = self.get_device()
