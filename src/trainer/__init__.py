@@ -1,3 +1,5 @@
 from .galaxy_zoo_simclr_trainer import GalaxyZooSimCLRTrainer
 from .galaxy_zoo_classifier_trainer import GalaxyZooClassifierTrainer
 from .galaxy_zoo_conditional_generator import GalaxyZooConditionalGeneratorTrainer
+
+from .galaxy_zoo_conditonal_generator_updated import GalaxyZooInfoSCC_Trainer

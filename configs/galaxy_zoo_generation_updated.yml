@@ -1,16 +1,16 @@
 batch_size: 2       # batch size to use, when training generator
-total_steps: 200000   # number of total training steps
+epochs: 250   # number of total training steps
 cls_reg_every: 8      # how often to apply classification regularization
 d_reg_every: 16       # how often to apply d regularization
 d_reg: 10.0           # d regularization parameter
 orth_reg: 100.0       # generator orthogonal regularization parameter
 
+save_every: 10
 log_every: 100     # how often to log losses to tensorboard
-save_every: 5000   # how often to save model checkpoints
 sample_every: 500  # how often to save generated images
 n_workers: 8       # number of workers in dataloader
 lr: 1e-4           # learning rate
-fid: False         # if True, then FID will be calculated when saving checkpoint model
+fid: True         # if True, then FID will be calculated when saving checkpoint model
 
 fine_tune_from: # path to model, to fine tune from
 
@@ -18,7 +18,7 @@ loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsga
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: /Users/vitaliykinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1  # path to folder with images
+  path: /Users/vitaliykinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/  # path to folder with images
   anno: /Users/vitaliykinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv          # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image

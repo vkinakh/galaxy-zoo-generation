@@ -4,16 +4,20 @@ from functools import partial
 import random
 
 from tqdm import trange, tqdm
+import numpy as np
+from sklearn.manifold import TSNE
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import utils
+from chamferdist import ChamferDistance
 
-from .generator_trainer import GeneratorTrainer
+from .generator_trainer import GeneratorTrainer, calculate_frechet_distance
 from src.models import ConditionalGenerator
 from src.models import ResNetSimCLR, GalaxyZooClassifier
 from src.models import GlobalDiscriminator, NLayerDiscriminator
+from src.models.fid import load_patched_inception_v3
 from src.loss import get_adversarial_losses, get_regularizer
 from src.data.dataset_updated import MakeDataLoader
 from src.transform import image_generation_augment
@@ -44,6 +48,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
     def train(self) -> NoReturn:
 
         epochs = self._config['epochs']
+        save_every = self._config['save_every']
         batch_size = self._config['batch_size']
         cls_reg_every = self._config['cls_reg_every']  # classification consistency regularization
         d_reg_every = self._config['d_reg_every']   # discriminator regularization
@@ -52,7 +57,9 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         train_dl, val_dl = self._get_dl()
 
-        log_sample = next(train_dl)[1][:16]
+        for b in train_dl:
+            log_sample = b[1][:16]
+            break
         log_sample = log_sample.to(self._device)
 
         samples_folder = self._writer.checkpoint_folder.parent / 'samples'
@@ -61,7 +68,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         ema = partial(accumulate, decay=0.5 ** (batch_size / (10 * 1000)))
 
         step = 0
-        for epoch in trange(self._epoch, epochs, desc='Epochs'):
+        for epoch in trange(self._epoch, epochs + 1, desc='Epochs'):
             self._generator.train()
             self._discriminator.train()
 
@@ -104,8 +111,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
                 step += 1
 
-            # TODO: Add validation
-            self._save_model(epoch)
+            if epoch in [1, epochs] or epoch % save_every == 0:
+                self._save_model(epoch)
 
     def _step_g(self):
 
@@ -195,7 +202,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         out_dim = self._config['encoder']['out_dim']
 
         encoder = ResNetSimCLR(base_model, n_channels, out_dim)
-        ckpt = torch.load(encoder_path)
+        ckpt = torch.load(encoder_path, map_location='cpu')
         encoder.load_state_dict(ckpt)
         encoder = encoder.to(self._device).eval()
 
@@ -204,7 +211,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         n_feat = self._config['classifier']['n_features']
 
         classifier = GalaxyZooClassifier(n_feat, n_classes)
-        ckpt = torch.load(classifier_path)
+        ckpt = torch.load(classifier_path, map_location='cpu')
         classifier.load_state_dict(ckpt)
         classifier = classifier.to(self._device).eval()
 
@@ -254,7 +261,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             betas=(0.5, 0.99),
         )
 
-        epoch = 0
+        epoch = 1
         if fine_tune_from is not None:
             ckpt = torch.load(fine_tune_from, map_location="cpu")
             epoch = ckpt["epoch"]
@@ -282,10 +289,33 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         compute_fid = self._config['fid']
 
         if compute_fid:
-            # TODO: calculate FID on SSL features
             fid_score = self._compute_fid_score()
             ckpt['fid'] = fid_score
             self._writer.add_scalar('FID', fid_score, epoch)
+
+            ssl_fid = self._compute_ssl_fid()
+            ckpt['ssl_fid'] = ssl_fid
+            self._writer.add_scalar('SSL_FID', ssl_fid, epoch)
+
+            chamfer_dist = self._chamfer_distance()
+            ckpt['chamfer_dist'] = chamfer_dist
+            self._writer.add_scalar('Chamfer', chamfer_dist, epoch)
+
+            ssl_ppl = self._compute_ssl_ppl()
+            ckpt['ssl_ppl'] = ssl_ppl
+            self._writer.add_scalar('SSL_PPL', ssl_ppl, epoch)
+
+            vgg_ppl = self._compute_vgg16_ppl()
+            ckpt['vgg_ppl'] = vgg_ppl
+            self._writer.add_scalar('VGG_PPL', vgg_ppl, epoch)
+
+            kid_inception = self._compute_inception_kid()
+            ckpt['KID'] = kid_inception
+            self._writer.add_scalar('KID_Inception', kid_inception, epoch)
+
+            kid_ssl = self._compute_ssl_kid()
+            ckpt['KID_SSL'] = kid_ssl
+            self._writer.add_scalar('KID_SSL', kid_ssl, epoch)
 
         checkpoint_folder = self._writer.checkpoint_folder
         save_file = checkpoint_folder / f'{epoch:07}.pt'
@@ -327,6 +357,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             n = batch_size
 
         if real:
+
             labels = []
             for _ in range(n):
                 idx = random.randrange(len(self._sample_ds))
@@ -343,3 +374,185 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         labels = make_galaxy_labels_hierarchical(labels)
         labels = labels.to(self._device)
         return labels
+
+    def _compute_ssl_fid(self) -> float:
+        """Computes FID on SSL features
+
+        Returns:
+            float: FID
+        """
+
+        self._encoder.eval()
+        train_dl, val_dl = self._get_dl()
+        n_batches = len(train_dl)
+
+        # compute stats for real dataset
+        real_activations = []
+        for (img, lbl) in tqdm(train_dl):
+            img = img.to(self._device)
+
+            with torch.no_grad():
+                h, _ = self._encoder(img)
+            real_activations.extend(h.cpu().numpy())
+        real_activations = np.array(real_activations)
+        mu_real = np.mean(real_activations, axis=0)
+        sigma_real = np.cov(real_activations, rowvar=False)
+
+        # compute stats for fake dataset
+        fake_activations = []
+        for _ in trange(n_batches):
+            label = self._sample_label()
+
+            with torch.no_grad():
+                img = self._g_ema(label)
+                h, _ = self._encoder(img)
+            fake_activations.extend(h.cpu().numpy())
+        fake_activations = np.array(fake_activations)
+
+        mu_fake = np.mean(fake_activations, axis=0)
+        sigma_fake = np.cov(fake_activations, rowvar=False)
+
+        fletcher_distance = calculate_frechet_distance(mu_fake, sigma_fake, mu_real, sigma_real)
+        self._encoder.train()
+        return fletcher_distance
+
+    def _chamfer_distance(self) -> float:
+        """Computes Chamfer distance between real and generated data
+
+        Returns:
+            float: computed Chamfer distance
+        """
+
+        train_dl, val_dl = self._get_dl()
+        n_batches = len(train_dl)
+
+        embeddings = []
+        # real data embeddings
+        for (img, lbl) in tqdm(train_dl):
+            img = img.to(self._device)
+
+            with torch.no_grad():
+                h, _ = self._encoder(img)
+
+            embeddings.extend(h.cpu().numpy())
+
+        # generated data embeddings
+        for _ in trange(n_batches):
+            label = self._sample_label()
+
+            with torch.no_grad():
+                img = self._g_ema(label)
+                h, _ = self._encoder(img)
+
+            embeddings.extend(h.cpu().numpy())
+
+        tsne_emb = TSNE(n_components=3).fit_transform(embeddings)
+        n = len(tsne_emb)
+
+        tsne_real = tsne_emb[:n//2, ]
+        tsne_fake = tsne_emb[n//2:, ]
+
+        tsne_real = torch.from_numpy(tsne_real).unsqueeze(0)
+        tsne_fake = torch.from_numpy(tsne_fake).unsqueeze(0)
+
+        chamfer_dist = ChamferDistance()
+        return chamfer_dist(tsne_real, tsne_fake).detach().item()
+
+    def _compute_inception_kid(self) -> float:
+        """Computes Kernel Inception Distance using features computed using pretrained InceptionV3
+
+        Returns:
+            float: KID (lower - better)
+        """
+
+        encoder = load_patched_inception_v3().to(self._device).eval()
+        self._g_ema.eval()
+
+        train_dl, val_dl = self._get_dl()
+        n_batches = len(train_dl)
+
+        real_features = []
+        for (img, lbl) in tqdm(train_dl):
+            img = img.to(self._device)
+
+            if img.shape[2] != 299 or img.shape[3] != 299:
+                img = torch.nn.functional.interpolate(img, size=(299, 299), mode='bicubic')
+
+            with torch.no_grad():
+                feature = encoder(img)[0].flatten(start_dim=1)
+                real_features.extend(feature.cpu().numpy())
+        real_features = np.array(real_features)
+
+        gen_features = []
+        for _ in trange(n_batches):
+            label = self._sample_label()
+
+            with torch.no_grad():
+                img = self._g_ema(label)
+
+                if img.shape[2] != 299 or img.shape[3] != 299:
+                    img = torch.nn.functional.interpolate(img, size=(299, 299), mode='bicubic')
+
+                feature = encoder(img)[0].flatten(start_dim=1)
+                gen_features.extend(feature.cpu().numpy())
+        gen_features = np.array(gen_features)
+
+        m = 1000  # max subset size
+        num_subsets = 100
+
+        n = real_features.shape[1]
+        t = 0
+        for _ in range(num_subsets):
+            x = gen_features[np.random.choice(gen_features.shape[0], m, replace=False)]
+            y = real_features[np.random.choice(real_features.shape[0], m, replace=False)]
+            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
+            b = (x @ y.T / n + 1) ** 3
+            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
+        kid = t / num_subsets / m
+        return float(kid)
+
+    def _compute_ssl_kid(self) -> float:
+        """Computes Kernel Inception Distance using features computed using pretrained SimCLR
+
+        Returns:
+            float: KID
+        """
+
+        self._encoder.eval()
+        self._g_ema.eval()
+
+        train_dl, val_dl = self._get_dl()
+        n_batches = len(train_dl)
+
+        real_features = []
+        for (img, lbl) in tqdm(train_dl):
+            img = img.to(self._device)
+
+            with torch.no_grad():
+                h, _ = self._encoder(img)
+            real_features.extend(h.cpu().numpy())
+        real_features = np.array(real_features)
+
+        gen_features = []
+        for _ in trange(n_batches):
+            label = self._sample_label()
+
+            with torch.no_grad():
+                img = self._g_ema(label)
+                h, _ = self._encoder(img)
+            gen_features.extend(h.cpu().numpy())
+        gen_features = np.array(gen_features)
+
+        m = 1000  # max subset size
+        num_subsets = 100
+
+        n = real_features.shape[1]
+        t = 0
+        for _ in range(num_subsets):
+            x = gen_features[np.random.choice(gen_features.shape[0], m, replace=False)]
+            y = real_features[np.random.choice(real_features.shape[0], m, replace=False)]
+            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
+            b = (x @ y.T / n + 1) ** 3
+            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
+        kid = t / num_subsets / m
+        return kid

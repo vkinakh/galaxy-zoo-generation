@@ -3,7 +3,7 @@ from typing import Dict, NoReturn, Optional
 from PIL import Image
 import random
 
-from tqdm import tqdm
+from tqdm import trange
 import numpy as np
 from scipy import linalg
 
@@ -13,7 +13,7 @@ import torch
 from torchvision import transforms, utils
 from torch.utils.data import DataLoader
 from chamferdist import ChamferDistance
-from geomloss import SamplesLoss
+# from geomloss import SamplesLoss
 
 from .base_trainer import BaseTrainer
 from src.data import GenDataset, get_dataset, infinite_loader, GANDataset
@@ -197,7 +197,7 @@ class GeneratorTrainer(BaseTrainer):
         n_batches = int(num_samples / bs) + 1
 
         real_features = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             img, _ = next(loader)
             img = img.to(self._device)
 
@@ -207,7 +207,7 @@ class GeneratorTrainer(BaseTrainer):
         real_features = np.array(real_features)
 
         gen_features = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             label = self._sample_label()
 
             with torch.no_grad():
@@ -243,11 +243,11 @@ class GeneratorTrainer(BaseTrainer):
         loader = self._get_dl()
 
         bs = self._config['batch_size']
-        num_samples = 50_000
+        num_samples = 20_000
         n_batches = int(num_samples / bs) + 1
 
         real_features = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             img, _ = next(loader)
             img = img.to(self._device)
 
@@ -260,7 +260,7 @@ class GeneratorTrainer(BaseTrainer):
         real_features = np.array(real_features)
 
         gen_features = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             label = self._sample_label()
 
             with torch.no_grad():
@@ -298,12 +298,12 @@ class GeneratorTrainer(BaseTrainer):
         self._g_ema.eval()
 
         bs = self._config['batch_size']
-        num_samples = 50_000
+        num_samples = 20_000
         epsilon = 1e-4
         n_batches = int(num_samples / bs) + 1
 
         dist = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             label = self._sample_label()
             labels_cat = torch.cat([label, label])
 
@@ -345,12 +345,12 @@ class GeneratorTrainer(BaseTrainer):
         self._g_ema.eval()
 
         bs = self._config['batch_size']
-        num_samples = 50_000
+        num_samples = 20_000
         epsilon = 1e-4
         n_batches = int(num_samples / bs) + 1
 
         dist = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             label = self._sample_label()
             labels_cat = torch.cat([label, label])
 
@@ -395,7 +395,7 @@ class GeneratorTrainer(BaseTrainer):
 
         # compute stats for real dataset
         real_activations = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             img, _ = next(loader)
             img = img.to(self._device)
 
@@ -408,7 +408,7 @@ class GeneratorTrainer(BaseTrainer):
 
         # compute stats for fake dataset
         fake_activations = []
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             label = self._sample_label()
 
             with torch.no_grad():
@@ -433,7 +433,7 @@ class GeneratorTrainer(BaseTrainer):
     #
     #     # real data embeddings
     #     real_embeddings = []
-    #     for _ in tqdm(range(n_batches)):
+    #     for _ in trange(n_batches):
     #         img, _ = next(loader)
     #         img = img.to(self._device)
     #
@@ -445,7 +445,7 @@ class GeneratorTrainer(BaseTrainer):
     #
     #     # fake embeddings
     #     fake_embeddings = []
-    #     for _ in tqdm(range(n_batches)):
+    #     for _ in trange(n_batches):
     #         label_oh = self._sample_label()
     #
     #         with torch.no_grad():
@@ -468,7 +468,7 @@ class GeneratorTrainer(BaseTrainer):
         bs = self._config['batch_size']
         diffs = []
 
-        for _ in tqdm(range(n_out)):
+        for _ in trange(n_out):
             label = self._sample_label(bs)
             label = label.to(self._device)
 
@@ -500,7 +500,7 @@ class GeneratorTrainer(BaseTrainer):
         loader = self._get_dl()
         embeddings = []
         # real data embeddings
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             img, _ = next(loader)
             img = img.to(self._device)
 
@@ -510,7 +510,7 @@ class GeneratorTrainer(BaseTrainer):
             embeddings.extend(h.cpu().numpy())
 
         # generated data embeddings
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             label = self._sample_label()
 
             with torch.no_grad():
@@ -668,7 +668,7 @@ class GeneratorTrainer(BaseTrainer):
         labels, embeddings = [], []
 
         # real data embeddings
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             img, label = next(loader)
             img = img.to(self._device)
 
@@ -679,7 +679,7 @@ class GeneratorTrainer(BaseTrainer):
             embeddings.extend(h.cpu().numpy())
 
         # generated data embeddings
-        for _ in tqdm(range(n_batches)):
+        for _ in trange(n_batches):
             label_oh = self._sample_label()
 
             with torch.no_grad():
