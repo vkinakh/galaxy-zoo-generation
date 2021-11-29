@@ -1,4 +1,4 @@
-batch_size: 2       # batch size to use, when training generator
+batch_size: 256       # batch size to use, when training generator
 epochs: 250   # number of total training steps
 cls_reg_every: 8      # how often to apply classification regularization
 d_reg_every: 16       # how often to apply d regularization
@@ -18,19 +18,19 @@ loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsga
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: /Users/vitaliykinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/  # path to folder with images
-  anno: /Users/vitaliykinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv          # path to file with attribute annotations
+  path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/  # path to folder with images
+  anno: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv          # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
   n_channels: 3     # number of channels in image
 
 encoder:                                   # encoder parameters
-  path: ./models/galaxy_zoo.pth  # path to pretrained encoder model
+  path: ./models/GalaxyZoo/galaxy_zoo.pth  # path to pretrained encoder model
   base_model: resnet50                     # encoder base model
   out_dim: 128                             # z-projection size
 
 classifier:                                           # classifier parameters
-  path: ./models/galaxy_zoo_classifier.pth  # path to pretrained classifier model
+  path: ./models/GalaxyZoo/galaxy_zoo_classifier.pth  # path to pretrained classifier model
   n_features: 2048                                    # number of input features in the classifier model
 
 generator:             # generator parameters
