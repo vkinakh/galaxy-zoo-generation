@@ -81,7 +81,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
                     loss_cls = self._step_cls_reg(real_img, real_label)
 
                 # D update
-                loss_d = self._step_d(real_img, real_label)
+                loss_d, pred_real, pred_fake = self._step_d(real_img, real_label)
                 # D regularize
                 if step % d_reg_every == 0:
                     r1 = self._step_reg_d(real_img, real_label)
@@ -92,12 +92,14 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
                 # log
                 if step % log_every == 0:
-                    self._writer.add_scalar('loss/cls_loss', loss_cls.item(), step)
-                    self._writer.add_scalar("loss/D", loss_d.item(), step)
-                    self._writer.add_scalar("loss/D_r1", r1.item(), step)
-                    self._writer.add_scalar("loss/G", loss_g.item(), step)
-                    self._writer.add_scalar("loss/G_orth", loss_g_reg.item(), step)
-                    self._writer.add_scalar("loss/G_adv", loss_g_adv.item(), step)
+                    self._writer.add_scalar('train/cls_loss', loss_cls.item(), step)
+                    self._writer.add_scalar('train/loss_D', loss_d.item(), step)
+                    self._writer.add_scalar('train/r1', r1.item(), step)
+                    self._writer.add_scalar('train/loss_G', loss_g.item(), step)
+                    self._writer.add_scalar('train/loss_G_orth', loss_g_reg.item(), step)
+                    self._writer.add_scalar('train/loss_G_adv', loss_g_adv.item(), step)
+                    self._writer.add_scalar('train/D(X)', pred_real.item(), step)
+                    self._writer.add_scalar('train/D(G(z))', pred_fake.item(), step)
 
                 if step % sample_every == 0:
                     with torch.no_grad():
@@ -111,8 +113,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
                 step += 1
 
-            if epoch in [1, epochs] or epoch % save_every == 0:
-                self._save_model(epoch)
+            self._save_model(epoch, compute_metrics=epoch in [1, epochs] or epoch % save_every == 0)
 
     def _step_g(self):
 
@@ -147,7 +148,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
     def _step_d(self,
                 img_real: torch.Tensor,
-                label_real: torch.Tensor) -> torch.Tensor:
+                label_real: torch.Tensor):
         with torch.no_grad():
             label_fake = self._sample_label(real=bool(random.getrandbits(1)), add_noise=True)
             img_fake = self._generator(label_fake)
@@ -158,7 +159,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         self._discriminator.zero_grad()
         d_loss.backward()
         self._d_optim.step()
-        return d_loss
+        return d_loss, pred_real.mean(), pred_fake.mean()
 
     def _step_cls_reg(self,
                       img_real: torch.Tensor,
@@ -222,6 +223,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         y_type = self._config['generator']['y_type']
 
         generator = ConditionalGenerator(
+            config=self._config,
             size=img_size,
             y_size=n_classes,
             z_size=z_size,
@@ -275,7 +277,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         return epoch, generator, discriminator, g_ema, g_optim, d_optim, encoder, classifier
 
-    def _save_model(self, epoch: int):
+    def _save_model(self, epoch: int, compute_metrics: bool = False):
         ckpt = {
             'epoch': epoch,
             'config': self._config,
@@ -286,36 +288,51 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             'd_optim': self._d_optim.state_dict(),
         }
 
-        compute_fid = self._config['fid']
+        compute_fid = self._config['fid'] and compute_metrics
 
         if compute_fid:
+
+            print('start FID')
             fid_score = self._compute_fid_score()
             ckpt['fid'] = fid_score
-            self._writer.add_scalar('FID', fid_score, epoch)
+            self._writer.add_scalar('eval/FID', fid_score, epoch)
+            print('end FID')
 
+            print('start SSL FID')
             ssl_fid = self._compute_ssl_fid()
             ckpt['ssl_fid'] = ssl_fid
-            self._writer.add_scalar('SSL_FID', ssl_fid, epoch)
+            self._writer.add_scalar('eval/SSL_FID', ssl_fid, epoch)
+            print('End SSL FID')
 
-            chamfer_dist = self._chamfer_distance()
-            ckpt['chamfer_dist'] = chamfer_dist
-            self._writer.add_scalar('Chamfer', chamfer_dist, epoch)
+            # print('start Chamfer dist')
+            # chamfer_dist = self._chamfer_distance()
+            # ckpt['chamfer_dist'] = chamfer_dist
+            # self._writer.add_scalar('eval/Chamfer', chamfer_dist, epoch)
+            # print('end Chamfer dist')
 
+            print('Start SSL PPL')
             ssl_ppl = self._compute_ssl_ppl()
             ckpt['ssl_ppl'] = ssl_ppl
-            self._writer.add_scalar('SSL_PPL', ssl_ppl, epoch)
+            self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, epoch)
+            print('End SSL PPL')
 
+            print('Start VGG PPL')
             vgg_ppl = self._compute_vgg16_ppl()
             ckpt['vgg_ppl'] = vgg_ppl
-            self._writer.add_scalar('VGG_PPL', vgg_ppl, epoch)
+            self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, epoch)
+            print('end VGG PPL')
 
+            print('start KID')
             kid_inception = self._compute_inception_kid()
             ckpt['KID'] = kid_inception
-            self._writer.add_scalar('KID_Inception', kid_inception, epoch)
+            self._writer.add_scalar('eval/KID_Inception', kid_inception, epoch)
+            print('end KID')
 
+            print('start KID SSL')
             kid_ssl = self._compute_ssl_kid()
             ckpt['KID_SSL'] = kid_ssl
-            self._writer.add_scalar('KID_SSL', kid_ssl, epoch)
+            self._writer.add_scalar('eval/KID_SSL', kid_ssl, epoch)
+            print('end KID')
 
         checkpoint_folder = self._writer.checkpoint_folder
         save_file = checkpoint_folder / f'{epoch:07}.pt'
@@ -367,7 +384,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             labels = torch.stack(labels)
 
             if add_noise:
-                labels += torch.randn(labels.shape)
+                labels += torch.randn(labels.shape) * 0.1
         else:
             labels = torch.randn((n, n_out))
 

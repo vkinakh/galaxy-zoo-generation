@@ -39,12 +39,14 @@ class GalaxyZooDataset(Dataset):
             transforms.CenterCrop(207),
             transforms.Resize((image_size,) * 2),
             transforms.ToTensor(),
+            transforms.Normalize(0.5, 0.5)
         ])
 
         self.augment_test = transforms.Compose([
             transforms.CenterCrop(207),
             transforms.Resize((image_size,) * 2),
             transforms.ToTensor(),
+            transforms.Normalize(0.5, 0.5)
         ])
 
     def __len__(self) -> int:
@@ -87,22 +89,22 @@ class MakeDataLoader:
                              batch_size: int = 64,
                              shuffle: bool = True, **kwargs) -> DataLoader:
         return DataLoader(self.dataset, batch_size=batch_size, shuffle=shuffle, drop_last=True,
-                          pin_memory=self.device == "cuda", **kwargs)
+                          pin_memory=False, **kwargs)
 
     def get_data_loader_train(self,
                               batch_size: int = 64,
                               shuffle: bool = True, **kwargs) -> DataLoader:
         return DataLoader(self.dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True,
-                          pin_memory=self.device == "cuda", **kwargs)
+                          pin_memory=False, **kwargs)
 
     def get_data_loader_test(self,
                              batch_size: int = 64,
                              shuffle: bool = False, **kwargs) -> DataLoader:
         return DataLoader(self.dataset_test, batch_size=batch_size, shuffle=shuffle, drop_last=True,
-                          pin_memory=self.device == "cuda", **kwargs)
+                          pin_memory=False, **kwargs)
 
     def get_data_loader_valid(self, batch_size: int = 64,
                               shuffle: bool = False,
                               **kwargs) -> DataLoader:
         return DataLoader(self.dataset_valid, batch_size=batch_size, shuffle=shuffle, drop_last=True,
-                          pin_memory=self.device == "cuda", **kwargs)
+                          pin_memory=False, **kwargs)

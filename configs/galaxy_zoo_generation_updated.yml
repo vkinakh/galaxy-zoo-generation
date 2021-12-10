@@ -1,4 +1,4 @@
-batch_size: 256       # batch size to use, when training generator
+batch_size: 128       # batch size to use, when training generator
 epochs: 250   # number of total training steps
 cls_reg_every: 8      # how often to apply classification regularization
 d_reg_every: 16       # how often to apply d regularization
@@ -8,7 +8,7 @@ orth_reg: 100.0       # generator orthogonal regularization parameter
 save_every: 10
 log_every: 100     # how often to log losses to tensorboard
 sample_every: 500  # how often to save generated images
-n_workers: 8       # number of workers in dataloader
+n_workers: 16       # number of workers in dataloader
 lr: 1e-4           # learning rate
 fid: True         # if True, then FID will be calculated when saving checkpoint model
 
@@ -45,4 +45,4 @@ discriminator:    # discriminator parameters
   ndf: 64
   n_layers: 4
 
-comment: galaxy_zoo_generation_patch_lsgan
+comment: galaxy_zoo_generation_patch_lsgan_noise_0.1

@@ -13,7 +13,7 @@ import torch
 from torchvision import transforms, utils
 from torch.utils.data import DataLoader
 from chamferdist import ChamferDistance
-# from geomloss import SamplesLoss
+from geomloss import SamplesLoss
 
 from .base_trainer import BaseTrainer
 from src.data import GenDataset, get_dataset, infinite_loader, GANDataset
@@ -154,7 +154,6 @@ class GeneratorTrainer(BaseTrainer):
 
         self._display_output_eps()
         self._explore_y()
-
         chamfer_dist = self._chamfer_distance()
         self._writer.add_scalar('Chamfer', float(chamfer_dist), 0)
 
@@ -424,38 +423,38 @@ class GeneratorTrainer(BaseTrainer):
         self._encoder.train()
         return fletcher_distance
 
-    # def _compute_geometric_distance(self) -> torch.Tensor:
-    #
-    #     n_batches = 200
-    #
-    #     loss = SamplesLoss()
-    #     loader = self._get_dl()
-    #
-    #     # real data embeddings
-    #     real_embeddings = []
-    #     for _ in trange(n_batches):
-    #         img, _ = next(loader)
-    #         img = img.to(self._device)
-    #
-    #         with torch.no_grad():
-    #             h, _ = self._encoder(img)
-    #
-    #         real_embeddings.extend(h.cpu())
-    #     real_embeddings = torch.stack(real_embeddings)
-    #
-    #     # fake embeddings
-    #     fake_embeddings = []
-    #     for _ in trange(n_batches):
-    #         label_oh = self._sample_label()
-    #
-    #         with torch.no_grad():
-    #             img = self._g_ema(label_oh)
-    #             h, _ = self._encoder(img)
-    #
-    #         fake_embeddings.extend(h.cpu())
-    #     fake_embeddings = torch.stack(fake_embeddings)
-    #     distance = loss(real_embeddings, fake_embeddings)
-    #     return distance
+    def _compute_geometric_distance(self) -> torch.Tensor:
+
+        n_batches = 200
+
+        loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
+        loader = self._get_dl()
+
+        # real data embeddings
+        real_embeddings = []
+        for _ in trange(n_batches):
+            img, _ = next(loader)
+            img = img.to(self._device)
+
+            with torch.no_grad():
+                h, _ = self._encoder(img)
+
+            real_embeddings.extend(h.cpu())
+        real_embeddings = torch.stack(real_embeddings)
+
+        # fake embeddings
+        fake_embeddings = []
+        for _ in trange(n_batches):
+            label_oh = self._sample_label()
+
+            with torch.no_grad():
+                img = self._g_ema(label_oh)
+                h, _ = self._encoder(img)
+
+            fake_embeddings.extend(h.cpu())
+        fake_embeddings = torch.stack(fake_embeddings)
+        distance = loss(real_embeddings, fake_embeddings)
+        return distance
 
     def _attribute_control_accuracy(self) -> Dict:
         """Computes attribute control accuracy
@@ -495,7 +494,7 @@ class GeneratorTrainer(BaseTrainer):
             float: computed Chamfer distance
         """
 
-        n_batches = 200
+        n_batches = 20
 
         loader = self._get_dl()
         embeddings = []
