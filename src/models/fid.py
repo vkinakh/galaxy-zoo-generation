@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import models
 
 import numpy as np
@@ -88,6 +88,26 @@ def fid_generator(generator, ref_mean, ref_cov, inception, device, num_samples, 
     gen_cov = np.cov(gen_feat, rowvar=False)
 
     return compute_fid(gen_mean, gen_cov, ref_mean, ref_cov)
+
+
+def get_fid_between_datasets(dataset_a: Dataset,
+                             dataset_b: Dataset,
+                             device: str,
+                             num_samples: int = 50_000) -> float:
+    inception = load_patched_inception_v3().eval().to(device)
+
+    loader_a = DataLoader(dataset_a, batch_size=128, shuffle=True, drop_last=False, num_workers=8)
+    loader_b = DataLoader(dataset_b, batch_size=128, shuffle=True, drop_last=False, num_workers=8)
+
+    feat_a = extract_loader_features(loader_a, inception, device)[:num_samples]
+    feat_b = extract_loader_features(loader_b, inception, device)[:num_samples]
+
+    mean_a = np.mean(feat_a, 0)
+    cov_a = np.cov(feat_a, rowvar=False)
+
+    mean_b = np.mean(feat_b, 0)
+    cov_b = np.cov(feat_b, rowvar=False)
+    return compute_fid(mean_a, cov_a, mean_b, cov_b)
 
 
 def get_fid_fn(dataset, device, num_samples=50_000):

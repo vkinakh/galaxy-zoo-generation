@@ -1,24 +1,26 @@
-batch_size: 32       # batch size to use, when training generator
-epochs: 250   # number of total training steps
-cls_reg_every: 8      # how often to apply classification regularization
-d_reg_every: 16       # how often to apply d regularization
-d_reg: 10.0           # d regularization parameter
-orth_reg: 100.0       # generator orthogonal regularization parameter
+batch_size: 128       # batch size to use, when training generator
+#epochs: 250   # number of total training steps
+#cls_reg_every: 8      # how often to apply classification regularization
+#d_reg_every: 16       # how often to apply d regularization
+#d_reg: 10.0           # d regularization parameter
+#orth_reg: 100.0       # generator orthogonal regularization parameter
 
-save_every: 10
-log_every: 100     # how often to log losses to tensorboard
-sample_every: 500  # how often to save generated images
+#save_every: 10
+#log_every: 100     # how often to log losses to tensorboard
+#sample_every: 500  # how often to save generated images
 n_workers: 16       # number of workers in dataloader
 lr: 1e-4           # learning rate
-fid: True         # if True, then FID will be calculated when saving checkpoint model
+#fid: True         # if True, then FID will be calculated when saving checkpoint model
 
-fine_tune_from: ./runs/Dec08_13-49-10_wyner_galaxy_zoo_generation_patch_lsgan_noise_0.1/checkpoint/0000250.pt # path to model, to fine tune from
+fine_tune_from: # path to model, to fine tune from
 
 loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsgan'
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/  # path to folder with images
+  path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/
+  train_path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/  # path to folder with images
+  test_path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_test_rev1/
   anno: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv          # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
@@ -45,4 +47,4 @@ discriminator:    # discriminator parameters
   ndf: 64
   n_layers: 4
 
-comment: galaxy_zoo_generation_patch_lsgan_noise_250_eval
+comment: galaxy_zoo_generation_baseline

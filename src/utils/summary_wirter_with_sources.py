@@ -113,3 +113,6 @@ class SummaryWriterWithSources:
         """
 
         return self._dirs_to_copy
+
+    def close(self):
+        self._writer.close()

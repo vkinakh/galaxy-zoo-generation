@@ -29,7 +29,8 @@ def train_generator(config_path: PathOrStr):
 
 def evaluate_generator(config_path: PathOrStr):
     config = get_config(config_path)
-    trainer = GalaxyZooConditionalGeneratorTrainer(config_path, config)
+    # trainer = GalaxyZooConditionalGeneratorTrainer(config_path, config)
+    trainer = GalaxyZooInfoSCC_Trainer(config_path, config)
     trainer.evaluate()
 
 

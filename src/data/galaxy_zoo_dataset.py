@@ -14,13 +14,23 @@ image_loader = partial(read_image, mode=ImageReadMode.RGB)
 
 class GalaxyZooUnlabeledDataset(Dataset):
 
+    """Unlabeled Galaxy Zoo dataset"""
+
     def __init__(self,
                  root: Union[str, Path],
-                 transform: Optional[Callable] = None):
+                 transform: Optional[Callable] = None,
+                 return_mock_label: bool = True):
+        """
+        Args:
+            root: path to folder with images
+            transform: transform to apply
+            return_mock_label: if True, mock label will be returned
+        """
 
         root = Path(root)
         self._transform = transform
         self._image_paths = [x for x in root.glob('**/*.jpg') if x.is_file()]
+        self._return_mock_label = return_mock_label
 
     def __len__(self) -> int:
         return len(self._image_paths)
@@ -31,7 +41,10 @@ class GalaxyZooUnlabeledDataset(Dataset):
 
         if self._transform is not None:
             x = self._transform(x)
-        return x, 0
+
+        if self._return_mock_label:
+            return x, 0
+        return x
 
 
 class GalaxyZooLabeledDataset(Dataset):
