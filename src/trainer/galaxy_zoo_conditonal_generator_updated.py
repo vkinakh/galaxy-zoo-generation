@@ -2,6 +2,7 @@ from typing import Dict, NoReturn, Optional
 import copy
 from functools import partial
 import random
+from pathlib import Path
 
 from tqdm import trange, tqdm
 import numpy as np
@@ -23,6 +24,7 @@ from src.loss import get_adversarial_losses, get_regularizer
 from src.data import infinite_loader
 from src.data.dataset_updated import MakeDataLoader
 from src.transform import image_generation_augment
+from src.metrics import evaluate_generator
 from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
 
 
@@ -157,6 +159,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         kid_ssl = self._compute_ssl_kid()
         self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
         self._writer.close()
+
+        self._compute_morphological_features()
 
     def compute_baseline(self) -> NoReturn:
         fid_score = self._baseline_ssl_fid()
@@ -461,7 +465,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        size = 64
+        size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
         ds_val = make_dl.dataset_valid
@@ -477,10 +481,11 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: FID
         """
 
+        n_samples = 50_000
         bs = self._config['batch_size']
 
         self._encoder.eval()
-        n_batches = int(50_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
 
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
@@ -529,12 +534,13 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: baseline SSL FID
         """
 
+        n_samples = 50_000
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
 
         self._encoder.eval()
 
-        n_batches = int(50_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = 299
@@ -584,15 +590,15 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: computed Chamfer distance
         """
 
+        n_samples = 20_000
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
 
-        # train_dl, val_dl = self._get_dl()
-        n_batches = int(20_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
 
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        size = 64
+        size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
         ds_val = make_dl.dataset_valid
@@ -640,13 +646,14 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: baseline Chamfer distance
         """
 
+        n_samples = 50_000
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
 
-        n_batches = int(50_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        size = 64
+        size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
         ds_val = make_dl.dataset_valid
@@ -690,17 +697,17 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: KID (lower - better)
         """
 
+        n_samples = 50_000
         encoder = load_patched_inception_v3().to(self._device).eval()
         self._g_ema.eval()
 
-        # train_dl, val_dl = self._get_dl()
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
 
-        n_batches = int(50_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        size = 64
+        size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
         ds_val = make_dl.dataset_valid
@@ -757,13 +764,14 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: baseline Inception KID
         """
 
+        n_samples = 50_000
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
         encoder = load_patched_inception_v3().to(self._device).eval()
 
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        size = 64
+        size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
         ds_val = make_dl.dataset_valid
@@ -771,7 +779,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
         dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
 
-        n_batches = int(50_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
 
         features_train = []
         for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
@@ -827,13 +835,14 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         self._encoder.eval()
         self._g_ema.eval()
 
+        n_samples = 50_000
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
-        n_batches = int(50_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
 
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        size = 64
+        size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
         ds_val = make_dl.dataset_valid
@@ -884,12 +893,13 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         self._encoder.eval()
 
+        n_samples = 50_000
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
 
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        size = 64
+        size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
         ds_val = make_dl.dataset_valid
@@ -897,7 +907,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
         dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
 
-        n_batches = int(50_000 / bs) + 1
+        n_batches = int(n_samples / bs) + 1
 
         features_train = []
         for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
@@ -937,3 +947,30 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
         kid = t / num_subsets / m
         return kid
+
+    def _compute_morphological_features(self):
+        """Computes morphological features for the generator"""
+
+        self._g_ema.eval()
+        bs = self._config['batch_size']
+        n_workers = self._config['n_workers']
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        ds_val = make_dl.dataset_valid
+        dl_val = DataLoader(ds_val, bs, True, num_workers=n_workers)
+
+        z_size = self._config['generator']['z_size']
+
+        comment = self._config['comment']
+        plot_path = Path(f'./images/{comment}/')
+        plot_path.mkdir(parents=True, exist_ok=True)
+
+        with torch.no_grad():
+            eval_results = evaluate_generator(dl_val, self._g_ema,
+                                              latent_dim=z_size,
+                                              plot=True,
+                                              plot_path=plot_path)
+        print(f'Eval results: {eval_results}')

@@ -1,4 +1,4 @@
-batch_size: 32       # batch size to use, when training generator
+batch_size: 128       # batch size to use, when training generator
 epochs: 250   # number of total training steps
 cls_reg_every: 8      # how often to apply classification regularization
 d_reg_every: 16       # how often to apply d regularization
@@ -45,4 +45,4 @@ discriminator:    # discriminator parameters
   ndf: 64
   n_layers: 4
 
-comment: galaxy_zoo_generation_patch_lsgan_250_eval
+comment: galaxy_zoo_generation_patch_lsgan_250_eval_morph
