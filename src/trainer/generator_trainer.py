@@ -17,6 +17,7 @@ from geomloss import SamplesLoss
 
 from .base_trainer import BaseTrainer
 from src.data import GenDataset, get_dataset, infinite_loader, GANDataset
+from src.data.dataset_updated import MakeDataLoader
 from src.models.fid import get_fid_fn, load_patched_inception_v3
 from src.models import inception_score
 from src.models import vgg16
@@ -297,7 +298,7 @@ class GeneratorTrainer(BaseTrainer):
         self._g_ema.eval()
 
         bs = self._config['batch_size']
-        num_samples = 20_000
+        num_samples = 50_000
         epsilon = 1e-4
         n_batches = int(num_samples / bs) + 1
 
@@ -344,7 +345,7 @@ class GeneratorTrainer(BaseTrainer):
         self._g_ema.eval()
 
         bs = self._config['batch_size']
-        num_samples = 20_000
+        num_samples = 50_000
         epsilon = 1e-4
         n_batches = int(num_samples / bs) + 1
 
@@ -709,6 +710,8 @@ class GeneratorTrainer(BaseTrainer):
 
         if name in ['galaxy_zoo']:
             transform = transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomAffine((0, 360), (0.01,) * 2),
                 transforms.CenterCrop(207),
                 transforms.Resize((size, size)),
                 transforms.ConvertImageDtype(torch.float),
@@ -750,14 +753,14 @@ class GeneratorTrainer(BaseTrainer):
             float: FID score
         """
 
-        name = self._config['dataset']['name']
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
+        size = 299
 
-        transform = self._get_fid_data_transform()
-        dataset = GenDataset(name, path, anno, transform=transform)
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        dataset = make_dl.dataset_valid
 
-        fid_func = get_fid_fn(dataset, self._device, len(dataset))
+        fid_func = get_fid_fn(dataset, self._device, 50_000)
         fid_score = fid_func(self._g_ema)
         return fid_score
 

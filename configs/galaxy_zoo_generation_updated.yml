@@ -45,4 +45,4 @@ discriminator:    # discriminator parameters
   ndf: 64
   n_layers: 4
 
-comment: galaxy_zoo_generation_patch_lsgan_noise_250_eval
+comment: galaxy_zoo_generation_patch_lsgan_250_eval

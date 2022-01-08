@@ -5,7 +5,6 @@ import random
 
 from tqdm import trange, tqdm
 import numpy as np
-# from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.manifold import TSNE
 
 import torch
@@ -21,7 +20,7 @@ from src.models import ResNetSimCLR, GalaxyZooClassifier
 from src.models import GlobalDiscriminator, NLayerDiscriminator
 from src.models.fid import load_patched_inception_v3, get_fid_between_datasets
 from src.loss import get_adversarial_losses, get_regularizer
-from src.data import GalaxyZooUnlabeledDataset
+from src.data import infinite_loader
 from src.data.dataset_updated import MakeDataLoader
 from src.transform import image_generation_augment
 from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
@@ -134,46 +133,47 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         - epsilon and z1, ..., zk latent dimensions
         """
 
-        # fid_score = self._compute_fid_score()
-        # self._writer.add_scalar('FID', fid_score, 0)
+        fid_score = self._compute_fid_score()
+        self._writer.add_scalar('eval/FID', fid_score, 0)
 
         i_score = self._compute_inception_score()
-        self._writer.add_scalar('IS', i_score, 0)
+        self._writer.add_scalar('eval/IS', i_score, 0)
 
         chamfer_dist = self._chamfer_distance()
-        self._writer.add_scalar('Chamfer', float(chamfer_dist), 0)
+        self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
-        # ssl_fid = self._compute_ssl_fid()
-        # self._writer.add_scalar('SSL_FID', ssl_fid, 0)
+        ssl_fid = self._compute_ssl_fid()
+        self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
-        # ssl_ppl = self._compute_ssl_ppl()
-        # self._writer.add_scalar('SSL_PPL', ssl_ppl, 0)
+        ssl_ppl = self._compute_ssl_ppl()
+        self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
 
-        # vgg_ppl = self._compute_vgg16_ppl()
-        # self._writer.add_scalar('VGG_PPL', vgg_ppl, 0)
+        vgg_ppl = self._compute_vgg16_ppl()
+        self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
 
-        # kid_inception = self._compute_inception_kid()
-        # self._writer.add_scalar('KID_Inception', kid_inception, 0)
+        kid_inception = self._compute_inception_kid()
+        self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
 
-        # kid_ssl = self._compute_ssl_kid()
-        # self._writer.add_scalar('KID_SSL', kid_ssl, 0)
+        kid_ssl = self._compute_ssl_kid()
+        self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
         self._writer.close()
 
     def compute_baseline(self) -> NoReturn:
-        # fid_score = self._baseline_ssl_fid()
-        # self._writer.add_scalar('baseline/FID', fid_score, 0)
+        fid_score = self._baseline_ssl_fid()
+        self._writer.add_scalar('baseline/FID', fid_score, 0)
 
-        # fid_ssl = self._compute_baseline_ssl_fid()
-        # self._writer.add_scalar('baseline/SSL_FID', fid_ssl, 0)
+        fid_ssl = self._compute_baseline_ssl_fid()
+        self._writer.add_scalar('baseline/SSL_FID', fid_ssl, 0)
 
         chamfer_dist = self._baseline_chamfer_distance()
         self._writer.add_scalar('baseline/Chamfer', chamfer_dist, 0)
 
-        # kid = self._compute_baseline_inception_kid()
-        # self._writer.add_scalar('baseline/KID', kid, 0)
+        kid = self._compute_baseline_inception_kid()
+        self._writer.add_scalar('baseline/KID', kid, 0)
 
-        # kid_ssl = self._compute_baseline_ssl_kid()
-        # self._writer.add_scalar('baseline/SSL_KID', kid_ssl, 0)
+        kid_ssl = self._compute_baseline_ssl_kid()
+        self._writer.add_scalar('baseline/SSL_KID', kid_ssl, 0)
+        self._writer.close()
 
     def _step_g(self):
 
@@ -326,7 +326,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         epoch = 1
         if fine_tune_from is not None:
             ckpt = torch.load(fine_tune_from, map_location="cpu")
-            epoch = ckpt["epoch"]
+            epoch = ckpt['epoch'] if 'epoch' in ckpt else 1
 
             generator.load_state_dict(ckpt["g"])
             discriminator.load_state_dict(ckpt["d"])
@@ -459,14 +459,15 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: baseline FID score
         """
 
-        path_train = self._config['dataset']['train_path']
-        path_test = self._config['dataset']['test_path']
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 64
 
-        transform = self._get_fid_data_transform()
-        ds_train = GalaxyZooUnlabeledDataset(path_train, transform, False)
-        ds_test = GalaxyZooUnlabeledDataset(path_test, transform, False)
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
 
-        fid_score = get_fid_between_datasets(ds_train, ds_test, self._device)
+        fid_score = get_fid_between_datasets(ds_test, ds_val, self._device)
         return fid_score
 
     def _compute_ssl_fid(self) -> float:
@@ -476,18 +477,29 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: FID
         """
 
+        bs = self._config['batch_size']
+
         self._encoder.eval()
-        train_dl, val_dl = self._get_dl()
-        n_batches = len(train_dl)
+        n_batches = int(50_000 / bs) + 1
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = infinite_loader(DataLoader(make_dl.dataset_valid, bs, True))
 
         # compute stats for real dataset
         real_activations = []
-        for (img, lbl) in tqdm(train_dl):
+        for i, (img, lbl) in enumerate(tqdm(ds_val, total=n_batches)):
             img = img.to(self._device)
 
             with torch.no_grad():
                 h, _ = self._encoder(img)
             real_activations.extend(h.cpu().numpy())
+
+            if i == n_batches:
+                break
         real_activations = np.array(real_activations)
         mu_real = np.mean(real_activations, axis=0)
         sigma_real = np.cov(real_activations, rowvar=False)
@@ -522,34 +534,42 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         self._encoder.eval()
 
-        path_train = self._config['dataset']['train_path']
-        path_test = self._config['dataset']['test_path']
+        n_batches = int(50_000 / bs) + 1
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 299
 
-        transform = self._get_data_transform()
-        ds_train = GalaxyZooUnlabeledDataset(path_train, transform, False)
-        dl_train = DataLoader(ds_train, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
-        ds_test = GalaxyZooUnlabeledDataset(path_test, transform, False)
-        dl_test = DataLoader(ds_test, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
 
         activation_train = []
-        for img in tqdm(dl_train):
+        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
             img = img.to(self._device)
 
             with torch.no_grad():
                 h, _ = self._encoder(img)
             activation_train.extend(h.cpu().numpy())
+
+            if i == n_batches:
+                break
         activation_train = np.array(activation_train)
         mu_train = np.mean(activation_train, axis=0)
         sigma_train = np.cov(activation_train, rowvar=False)
 
         # TODO: make the separate function
         activation_test = []
-        for img in tqdm(dl_test):
+        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
             img = img.to(self._device)
 
             with torch.no_grad():
                 h, _ = self._encoder(img)
             activation_test.extend(h.cpu().numpy())
+
+            if i == n_batches:
+                break
         activation_test = np.array(activation_test)
         mu_test = np.mean(activation_test, axis=0)
         sigma_test = np.cov(activation_test, rowvar=False)
@@ -565,13 +585,22 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         """
 
         bs = self._config['batch_size']
+        n_workers = self._config['n_workers']
 
-        train_dl, val_dl = self._get_dl()
+        # train_dl, val_dl = self._get_dl()
         n_batches = int(20_000 / bs) + 1
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 64
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
 
         embeddings = []
         # real data embeddings
-        for i, (img, lbl) in enumerate(tqdm(train_dl)):
+        for i, (img, lbl) in enumerate(tqdm(dl_val)):
             img = img.to(self._device)
 
             with torch.no_grad():
@@ -613,19 +642,20 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
+
         n_batches = int(50_000 / bs) + 1
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 64
 
-        path_train = self._config['dataset']['train_path']
-        path_test = self._config['dataset']['test_path']
-
-        transform = self._get_data_transform()
-        ds_train = GalaxyZooUnlabeledDataset(path_train, transform, False)
-        dl_train = DataLoader(ds_train, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
-        ds_test = GalaxyZooUnlabeledDataset(path_test, transform, False)
-        dl_test = DataLoader(ds_test, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
 
         embeddings_train = []
-        for i, img in enumerate(tqdm(dl_train)):
+        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
             img = img.to(self._device)
             with torch.no_grad():
                 h, _ = self._encoder(img)
@@ -635,7 +665,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
                 break
 
         embeddings_test = []
-        for i, img in enumerate(tqdm(dl_test)):
+        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
             img = img.to(self._device)
             with torch.no_grad():
                 h, _ = self._encoder(img)
@@ -663,11 +693,21 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         encoder = load_patched_inception_v3().to(self._device).eval()
         self._g_ema.eval()
 
-        train_dl, val_dl = self._get_dl()
-        n_batches = len(train_dl)
+        # train_dl, val_dl = self._get_dl()
+        bs = self._config['batch_size']
+        n_workers = self._config['n_workers']
+
+        n_batches = int(50_000 / bs) + 1
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 64
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
 
         real_features = []
-        for (img, lbl) in tqdm(train_dl):
+        for i, (img, lbl) in enumerate(tqdm(dl_val, total=n_batches)):
             img = img.to(self._device)
 
             if img.shape[2] != 299 or img.shape[3] != 299:
@@ -676,6 +716,10 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             with torch.no_grad():
                 feature = encoder(img)[0].flatten(start_dim=1)
                 real_features.extend(feature.cpu().numpy())
+
+            if i == n_batches:
+                break
+
         real_features = np.array(real_features)
 
         gen_features = []
@@ -717,19 +761,20 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         n_workers = self._config['n_workers']
         encoder = load_patched_inception_v3().to(self._device).eval()
 
-        path_train = self._config['dataset']['train_path']
-        path_test = self._config['dataset']['test_path']
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 64
 
-        transform = self._get_data_transform()
-        ds_train = GalaxyZooUnlabeledDataset(path_train, transform, False)
-        dl_train = DataLoader(ds_train, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
-        ds_test = GalaxyZooUnlabeledDataset(path_test, transform, False)
-        dl_test = DataLoader(ds_test, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
 
         n_batches = int(50_000 / bs) + 1
 
         features_train = []
-        for i, img in enumerate(tqdm(dl_train)):
+        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
             img = img.to(self._device)
 
             if img.shape[2] != 299 or img.shape[3] != 299:
@@ -744,7 +789,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         features_train = np.array(features_train)
 
         features_test = []
-        for i, img in enumerate(tqdm(dl_test)):
+        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
             img = img.to(self._device)
 
             if img.shape[2] != 299 or img.shape[3] != 299:
@@ -782,16 +827,28 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         self._encoder.eval()
         self._g_ema.eval()
 
-        train_dl, val_dl = self._get_dl()
-        n_batches = len(train_dl)
+        bs = self._config['batch_size']
+        n_workers = self._config['n_workers']
+        n_batches = int(50_000 / bs) + 1
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 64
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
 
         real_features = []
-        for (img, lbl) in tqdm(train_dl):
+        for i, (img, lbl) in enumerate(tqdm(dl_val, total=n_batches)):
             img = img.to(self._device)
 
             with torch.no_grad():
                 h, _ = self._encoder(img)
             real_features.extend(h.cpu().numpy())
+
+            if i == n_batches:
+                break
         real_features = np.array(real_features)
 
         gen_features = []
@@ -829,33 +886,42 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         bs = self._config['batch_size']
         n_workers = self._config['n_workers']
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = 64
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
+
         n_batches = int(50_000 / bs) + 1
 
-        path_train = self._config['dataset']['train_path']
-        path_test = self._config['dataset']['test_path']
-
-        transform = self._get_data_transform()
-        ds_train = GalaxyZooUnlabeledDataset(path_train, transform, False)
-        dl_train = DataLoader(ds_train, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
-        ds_test = GalaxyZooUnlabeledDataset(path_test, transform, False)
-        dl_test = DataLoader(ds_test, batch_size=bs, shuffle=False, drop_last=False, num_workers=n_workers)
-
         features_train = []
-        for i, img in enumerate(tqdm(dl_train)):
+        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
             img = img.to(self._device)
 
             with torch.no_grad():
                 h, _ = self._encoder(img)
             features_train.extend(h.cpu().numpy())
+
+            if i == n_batches:
+                break
+
         features_train = np.array(features_train)
 
         features_test = []
-        for i, img in enumerate(tqdm(dl_test)):
+        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
             img = img.to(self._device)
 
             with torch.no_grad():
                 h, _ = self._encoder(img)
             features_test.extend(h.cpu().numpy())
+            if i == n_batches:
+                break
+
         features_test = np.array(features_test)
 
         m = 1000  # max subset size
@@ -871,13 +937,3 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
         kid = t / num_subsets / m
         return kid
-
-
-if __name__ == '__main__':
-    from src.utils import get_config
-
-    config_path = '/home/kinakh/Development/Projects/galaxy_zoo_generation/configs/galaxy_zoo_baseline.yml'
-    config = get_config(config_path)
-
-    trainer = GalaxyZooInfoSCC_Trainer(config_path, config)
-    trainer.compute_baseline()

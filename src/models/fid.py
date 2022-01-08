@@ -12,6 +12,8 @@ from scipy import linalg
 from tqdm import tqdm
 from functools import partial
 
+from src.data import infinite_loader
+
 
 def load_patched_inception_v3():
     inception_feat = InceptionV3([3], normalize_input=False)
@@ -21,15 +23,18 @@ def load_patched_inception_v3():
 
 @torch.no_grad()
 def extract_loader_features(loader, inception, device):
+    n_batches = int(50_000 / 128) + 1
     feature_list = []
 
-    for img in tqdm(loader, desc="extracting ref features for FID: ", leave=False):
+    for i, (img, _) in tqdm(enumerate(loader), desc="extracting ref features for FID: ", leave=False):
         img = img.to(device)
         feature = inception(img)[0].view(img.shape[0], -1)
         feature_list.append(feature.to("cpu"))
 
-    features = torch.cat(feature_list, 0).numpy()
+        if i == n_batches:
+            break
 
+    features = torch.cat(feature_list, 0).numpy()
     return features
 
 
@@ -96,8 +101,8 @@ def get_fid_between_datasets(dataset_a: Dataset,
                              num_samples: int = 50_000) -> float:
     inception = load_patched_inception_v3().eval().to(device)
 
-    loader_a = DataLoader(dataset_a, batch_size=128, shuffle=True, drop_last=False, num_workers=8)
-    loader_b = DataLoader(dataset_b, batch_size=128, shuffle=True, drop_last=False, num_workers=8)
+    loader_a = infinite_loader(DataLoader(dataset_a, batch_size=128, shuffle=True, drop_last=False, num_workers=8))
+    loader_b = infinite_loader(DataLoader(dataset_b, batch_size=128, shuffle=True, drop_last=False, num_workers=8))
 
     feat_a = extract_loader_features(loader_a, inception, device)[:num_samples]
     feat_b = extract_loader_features(loader_b, inception, device)[:num_samples]
