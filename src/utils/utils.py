@@ -1,6 +1,7 @@
 from typing import Any
 import yaml
 from functools import partial
+import functools
 import re
 import urllib
 import glob
@@ -11,6 +12,7 @@ import html
 import uuid
 import io
 import tempfile
+import warnings
 
 import torch
 import torch.nn as nn

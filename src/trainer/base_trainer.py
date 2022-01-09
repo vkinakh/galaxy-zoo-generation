@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, NoReturn
 
 from src.utils import get_device
 from src.utils import SummaryWriterWithSources
@@ -29,3 +29,7 @@ class BaseTrainer(ABC):
     @abstractmethod
     def _save_model(self):
         pass
+
+    def _log(self, tag: str, message: Dict[str, float], step: int) -> NoReturn:
+        for key, val in message.items():
+            self._writer.add_scalar(f'{tag}/{key}', val, step)

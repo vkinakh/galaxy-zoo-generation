@@ -39,20 +39,20 @@ class GalaxyZooDataset(Dataset):
             transforms.CenterCrop(207),
             transforms.Resize((image_size,) * 2),
             transforms.ToTensor(),
-            transforms.Normalize(0.5, 0.5)
+            transforms.Normalize(0.5, 0.5)  # images normalized to [-1, 1]
         ])
 
         self.augment_test = transforms.Compose([
             transforms.CenterCrop(207),
             transforms.Resize((image_size,) * 2),
             transforms.ToTensor(),
-            transforms.Normalize(0.5, 0.5)
+            transforms.Normalize(0.5, 0.5)  # images normalized to [-1, 1]
         ])
 
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int):
         file, label = self.data[index]
         img = Image.open(file)
         if self.test_data:
@@ -63,6 +63,9 @@ class GalaxyZooDataset(Dataset):
 
 
 class MakeDataLoader:
+
+    """Class that creates train, valid and test datasets/dataloaders"""
+
     def __init__(self,
                  folder_images: PathOrStr,
                  file_labels: PathOrStr,

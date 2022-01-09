@@ -7,6 +7,7 @@ from pathlib import Path
 from tqdm import trange, tqdm
 import numpy as np
 from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -21,6 +22,7 @@ from src.models import ConditionalGenerator
 from src.models import ResNetSimCLR, GalaxyZooClassifier
 from src.models import GlobalDiscriminator, NLayerDiscriminator
 from src.models.fid import load_patched_inception_v3, get_fid_between_datasets
+from src.models.vgg16 import vgg16
 from src.loss import get_adversarial_losses, get_regularizer
 from src.data import infinite_loader
 from src.data.dataset_updated import MakeDataLoader
@@ -30,6 +32,18 @@ from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
 
 
 torch.backends.cudnn.benchmark = True
+
+
+def slerp(a, b, t):
+    a = a / a.norm(dim=-1, keepdim=True)
+    b = b / b.norm(dim=-1, keepdim=True)
+    d = (a * b).sum(dim=-1, keepdim=True)
+    p = t * torch.acos(d)
+    c = b - d * a
+    c = c / c.norm(dim=-1, keepdim=True)
+    d = a * torch.cos(p) + c * torch.sin(p)
+    d = d / d.norm(dim=-1, keepdim=True)
+    return d
 
 
 class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
@@ -51,6 +65,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         self._augment = image_generation_augment()
 
     def train(self) -> NoReturn:
+        """Run training"""
 
         epochs = self._config['epochs']
         save_every = self._config['save_every']
@@ -126,6 +141,13 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         - FID score
         - Inception Score
         - Chamfer distance
+        - FID score using SimCLR features
+        - PPL using SimCLR features
+        - PPL using VGG features
+        - KID score
+        - KID score using SimCLR features
+        - morphological features
+        - Geometric distance
         - attribute control accuracy
 
         and exploring:
@@ -142,47 +164,56 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         i_score = self._compute_inception_score()
         self._writer.add_scalar('eval/IS', i_score, 0)
 
-        chamfer_dist = self._chamfer_distance()
+        chamfer_dist = self._compute_chamfer_distance()
         self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
         ssl_fid = self._compute_ssl_fid()
         self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
-        ssl_ppl = self._compute_ssl_ppl()
+        ssl_ppl = self._compute_ppl('simclr')
         self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
 
-        vgg_ppl = self._compute_vgg16_ppl()
+        vgg_ppl = self._compute_ppl('vgg')
         self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
 
-        kid_inception = self._compute_inception_kid()
+        kid_inception = self._compute_kid('inception')
         self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
 
-        kid_ssl = self._compute_ssl_kid()
+        kid_ssl = self._compute_kid('simclr')
         self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
 
-        self._compute_morphological_features()
+        morp_res = self._compute_morphological_features()
+        self._log('eval/morphological', morp_res, 0)
 
         geometric_dist = self._compute_geometric_distance()
         self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
+
+        attribute_accuracy = self._attribute_control_accuracy()
+        self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
+
+        self._traverse_zk()
+        self._explore_eps()
+        self._explore_eps_zs()
+
         self._writer.close()
 
     def compute_baseline(self) -> NoReturn:
         """Computes baseline metrics"""
 
-        fid_score = self._baseline_ssl_fid()
+        fid_score = self._compute_baseline_fid()
         self._writer.add_scalar('baseline/FID', fid_score, 0)
 
         fid_ssl = self._compute_baseline_ssl_fid()
         self._writer.add_scalar('baseline/SSL_FID', fid_ssl, 0)
 
-        chamfer_dist = self._baseline_chamfer_distance()
+        chamfer_dist = self._compute_baseline_chamfer_distance()
         self._writer.add_scalar('baseline/Chamfer', chamfer_dist, 0)
 
-        kid = self._compute_baseline_inception_kid()
-        self._writer.add_scalar('baseline/KID', kid, 0)
+        kid = self._compute_baseline_kid('inception')
+        self._writer.add_scalar('baseline/KID_Inception', kid, 0)
 
-        kid_ssl = self._compute_baseline_ssl_kid()
-        self._writer.add_scalar('baseline/SSL_KID', kid_ssl, 0)
+        kid_ssl = self._compute_baseline_kid('simclr')
+        self._writer.add_scalar('baseline/KID_SSL', kid_ssl, 0)
 
         geom_dist = self._baseline_geometric_distance()
         self._writer.add_scalar('baseline/Geometric_dist', geom_dist, 0)
@@ -365,47 +396,33 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         if compute_fid:
 
-            print('start FID')
             fid_score = self._compute_fid_score()
             ckpt['fid'] = fid_score
             self._writer.add_scalar('eval/FID', fid_score, epoch)
-            print('end FID')
 
-            print('start SSL FID')
             ssl_fid = self._compute_ssl_fid()
             ckpt['ssl_fid'] = ssl_fid
             self._writer.add_scalar('eval/SSL_FID', ssl_fid, epoch)
-            print('End SSL FID')
 
-            print('start Chamfer dist')
-            chamfer_dist = self._chamfer_distance()
+            chamfer_dist = self._compute_chamfer_distance()
             ckpt['chamfer_dist'] = chamfer_dist
             self._writer.add_scalar('eval/Chamfer', chamfer_dist, epoch)
-            print('end Chamfer dist')
 
-            print('Start SSL PPL')
-            ssl_ppl = self._compute_ssl_ppl()
+            ssl_ppl = self._compute_ppl('simclr')
             ckpt['ssl_ppl'] = ssl_ppl
             self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, epoch)
-            print('End SSL PPL')
 
-            print('Start VGG PPL')
-            vgg_ppl = self._compute_vgg16_ppl()
+            vgg_ppl = self._compute_ppl('vgg')
             ckpt['vgg_ppl'] = vgg_ppl
             self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, epoch)
-            print('end VGG PPL')
 
-            print('start KID')
-            kid_inception = self._compute_inception_kid()
+            kid_inception = self._compute_kid('inception')
             ckpt['KID'] = kid_inception
             self._writer.add_scalar('eval/KID_Inception', kid_inception, epoch)
-            print('end KID')
 
-            print('start KID SSL')
-            kid_ssl = self._compute_ssl_kid()
+            kid_ssl = self._compute_kid('simclr')
             ckpt['KID_SSL'] = kid_ssl
             self._writer.add_scalar('eval/KID_SSL', kid_ssl, epoch)
-            print('end KID')
 
         checkpoint_folder = self._writer.checkpoint_folder
         save_file = checkpoint_folder / f'{epoch:07}.pt'
@@ -465,22 +482,16 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         labels = labels.to(self._device)
         return labels
 
-    @torch.no_grad()
-    def _baseline_geometric_distance(self) -> float:
-        """Computes baseline geometric distance between features computed using SimCLR
-        for two dataset splits
+    def _get_eval_dl(self) -> DataLoader:
+        """Loads dataloader for evaluation
 
         Returns:
-            float: baseline geometric distance
+            DataLoader: evaluation dataloader
         """
 
-        loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
-
         bs = self._config['batch_size']
-        n_samples = 20_000
-        n_batches = int(n_samples / bs) + 1
+        n_workers = self._config['n_workers']
 
-        # load dataset
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
@@ -488,30 +499,218 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
         ds_val = make_dl.dataset_valid
         ds_test = make_dl.dataset_test
+        ds = ConcatDataset([ds_val, ds_test])
+        dl = infinite_loader(DataLoader(ds, bs, True, num_workers=n_workers))
+        return dl
 
-        dl_val = infinite_loader(DataLoader(ds_val, bs, shuffle=True, drop_last=True))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, shuffle=True, drop_last=True))
+    @torch.no_grad()
+    def _compute_ssl_fid(self) -> float:
+        """Computes FID on SSL features
 
-        embeddings_val = []
-        embeddings_test = []
+        Returns:
+            float: FID
+        """
+        n_samples = 50_000
+        bs = self._config['batch_size']
+        n_batches = int(n_samples / bs) + 1
+        dl = self._get_eval_dl()
+
+        # compute activations
+        activations_real = []
+        activations_fake = []
 
         for _ in trange(n_batches):
-            img_val, _ = next(dl_val)
-            img_val = img_val.to(self._device)
-            img_test, _ = next(dl_test)
-            img_test = img_test.to(self._device)
+            img, lbl = next(dl)
+            img = img.to(self._device)
+            lbl = lbl.to(self._device)
 
             with torch.no_grad():
-                h_val, _ = self._encoder(img_val)
-                h_test, _ = self._encoder(img_test)
+                img_gen = self._g_ema(lbl)
 
-            embeddings_val.extend(h_val.detach().cpu())
-            embeddings_test.extend(h_test.detach().cpu())
+                h, _ = self._encoder(img)
+                h_gen, _ = self._encoder(img_gen)
 
-        embeddings_val = torch.stack(embeddings_val)
-        embeddings_test = torch.stack(embeddings_test)
-        distance = loss(embeddings_val, embeddings_test)
-        return distance.detach().cpu().item()
+            activations_real.extend(h.cpu().numpy())
+            activations_fake.extend(h_gen.cpu().numpy())
+
+        activations_real = np.array(activations_real)
+        activations_fake = np.array(activations_fake)
+
+        mu_real = np.mean(activations_real, axis=0)
+        sigma_real = np.cov(activations_real, rowvar=False)
+
+        mu_fake = np.mean(activations_fake, axis=0)
+        sigma_fake = np.cov(activations_fake, rowvar=False)
+        fletcher_distance = calculate_frechet_distance(mu_fake, sigma_fake, mu_real, sigma_real)
+        return fletcher_distance
+
+    @torch.no_grad()
+    def _compute_chamfer_distance(self) -> float:
+        """Computes Chamfer distance between real and generated data
+
+        Returns:
+            float: computed Chamfer distance
+        """
+
+        n_samples = 20_000
+        bs = self._config['batch_size']
+        n_batches = int(n_samples / bs) + 1
+        dl = self._get_eval_dl()
+
+        embeddings_real = []
+        embeddings_gen = []
+        for _ in trange(n_batches):
+            img, lbl = next(dl)
+            img = img.to(self._device)
+            lbl = lbl.to(self._device)
+
+            with torch.no_grad():
+                img_gen = self._g_ema(lbl)
+                h, _ = self._encoder(img)
+                h_gen, _ = self._encoder(img_gen)
+
+            embeddings_real.extend(h.cpu().numpy())
+            embeddings_gen.extend(h_gen.cpu().numpy())
+
+        embeddings_real = np.array(embeddings_real, dtype=np.float32)
+        embeddings_gen = np.array(embeddings_gen, dtype=np.float32)
+        embeddings = np.concatenate((embeddings_real, embeddings_gen))
+        tsne_emb = TSNE(n_components=3, n_jobs=16).fit_transform(embeddings)
+
+        n = len(tsne_emb)
+        tsne_real = np.array(tsne_emb[:n//2, ], dtype=np.float32)
+        tsne_fake = np.array(tsne_emb[n//2:, ], dtype=np.float32)
+
+        tsne_real = torch.from_numpy(tsne_real).unsqueeze(0)
+        tsne_fake = torch.from_numpy(tsne_fake).unsqueeze(0)
+
+        chamfer_dist = ChamferDistance()
+        return chamfer_dist(tsne_real, tsne_fake).detach().item()
+
+    @torch.no_grad()
+    def _compute_ppl(self, encoder_type: str = 'simclr') -> float:
+        """Computes perceptual path length (PPL)
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, vgg
+
+        Returns:
+            float: perceptual path length (smaller better)
+        """
+
+        if encoder_type not in ['simclr', 'vgg']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = vgg16().to(self._device).eval()
+
+        n_samples = 50_000
+        eps = 1e-4
+        bs = self._config['batch_size']
+        n_batches = int(n_samples / bs) + 1
+
+        dist = []
+        for _ in trange(n_batches):
+            label = self._sample_label(real=True, add_noise=False)
+
+            labels_cat = torch.cat([label, label])
+            t = torch.rand([label.shape[0]], device=label.device)
+            eps0 = self._g_ema.sample_eps(bs)
+            eps1 = self._g_ema.sample_eps(bs)
+
+            z0 = z1 = self._g_ema.sample_zs(bs)
+
+            epst0 = slerp(eps0, eps1, t.unsqueeze(1))
+            epst1 = slerp(eps0, eps1, t.unsqueeze(1) + eps)
+
+            with torch.no_grad():
+                img = self._g_ema(labels_cat, torch.cat([epst0, epst1]), torch.cat([z0, z1]))
+
+                if encoder_type == 'simclr':
+                    h, _ = encoder(img)
+                else:
+                    if img.shape[2] != 256 or img.shape[3] != 256:
+                        img = torch.nn.functional.interpolate(img, size=(256, 256), mode='bicubic')
+                    h = encoder(img)
+
+            h0, h1 = h.chunk(2)
+            d = (h0 - h1).square().sum(1) / eps ** 2
+            dist.extend(d.cpu().numpy())
+
+        dist = np.array(dist)
+        lo = np.percentile(dist, 1, interpolation='lower')
+        hi = np.percentile(dist, 99, interpolation='higher')
+        ppl = np.extract(np.logical_and(dist >= lo, dist <= hi), dist).mean()
+        return ppl
+
+    @torch.no_grad()
+    def _compute_kid(self, encoder_type: str = 'simclr') -> float:
+        """Computes KID score
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, inception
+
+        Returns:
+            float: KID score
+        """
+
+        if encoder_type not in ['simclr', 'inception']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = load_patched_inception_v3().to(self._device).eval()
+
+        n_samples = 50_000
+        bs = self._config['batch_size']
+        n_batches = int(n_samples / bs) + 1
+
+        dl = self._get_eval_dl()
+
+        features_real = []
+        features_gen = []
+
+        for _ in trange(n_batches):
+            img, lbl = next(dl)
+            img = img.to(self._device)
+            lbl = lbl.to(self._device)
+
+            with torch.no_grad():
+                img_gen = self._g_ema(lbl)
+
+                if encoder_type == 'inception':
+                    if img.shape[2] != 299 or img.shape[3] != 299:
+                        img = torch.nn.functional.interpolate(img, size=(299, 299), mode='bicubic')
+
+                    img_gen = torch.nn.functional.interpolate(img_gen, size=(299, 299), mode='bicubic')
+
+                    h = encoder(img)[0].flatten(start_dim=1)
+                    h_gen = encoder(img_gen)[0].flatten(start_dim=1)
+                else:
+                    h, _ = encoder(img)
+                    h_gen, _ = encoder(img_gen)
+
+            features_real.extend(h.cpu().numpy())
+            features_gen.extend(h_gen.cpu().numpy())
+
+        features_real = np.array(features_real)
+        features_gen = np.array(features_gen)
+        m = 1000  # max subset size
+        num_subsets = 100
+
+        n = features_real.shape[1]
+        t = 0
+        for _ in range(num_subsets):
+            x = features_gen[np.random.choice(features_gen.shape[0], m, replace=False)]
+            y = features_real[np.random.choice(features_real.shape[0], m, replace=False)]
+            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
+            b = (x @ y.T / n + 1) ** 3
+            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
+        kid = t / num_subsets / m
+        return float(kid)
 
     @torch.no_grad()
     def _compute_geometric_distance(self) -> float:
@@ -560,499 +759,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         distance = loss(embeddings_real, embeddings_gen)
         return distance.detach().cpu().item()
 
-    def _baseline_ssl_fid(self) -> float:
-        """Computes baseline FID score
-
-        Returns:
-            float: baseline FID score
-        """
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-
-        fid_score = get_fid_between_datasets(ds_test, ds_val, self._device)
-        return fid_score
-
-    def _compute_ssl_fid(self) -> float:
-        """Computes FID on SSL features
-
-        Returns:
-            float: FID
-        """
-
-        n_samples = 50_000
-        bs = self._config['batch_size']
-
-        self._encoder.eval()
-        n_batches = int(n_samples / bs) + 1
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = infinite_loader(DataLoader(make_dl.dataset_valid, bs, True))
-
-        # compute stats for real dataset
-        real_activations = []
-        for i, (img, lbl) in enumerate(tqdm(ds_val, total=n_batches)):
-            img = img.to(self._device)
-
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            real_activations.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-        real_activations = np.array(real_activations)
-        mu_real = np.mean(real_activations, axis=0)
-        sigma_real = np.cov(real_activations, rowvar=False)
-
-        # compute stats for fake dataset
-        fake_activations = []
-        for _ in trange(n_batches):
-            label = self._sample_label()
-
-            with torch.no_grad():
-                img = self._g_ema(label)
-                h, _ = self._encoder(img)
-            fake_activations.extend(h.cpu().numpy())
-        fake_activations = np.array(fake_activations)
-
-        mu_fake = np.mean(fake_activations, axis=0)
-        sigma_fake = np.cov(fake_activations, rowvar=False)
-
-        fletcher_distance = calculate_frechet_distance(mu_fake, sigma_fake, mu_real, sigma_real)
-        self._encoder.train()
-        return fletcher_distance
-
-    def _compute_baseline_ssl_fid(self) -> float:
-        """Computes baseline FID on SSL features
-
-        Returns:
-            float: baseline SSL FID
-        """
-
-        n_samples = 50_000
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        self._encoder.eval()
-
-        n_batches = int(n_samples / bs) + 1
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = 299
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
-
-        activation_train = []
-        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
-            img = img.to(self._device)
-
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            activation_train.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-        activation_train = np.array(activation_train)
-        mu_train = np.mean(activation_train, axis=0)
-        sigma_train = np.cov(activation_train, rowvar=False)
-
-        # TODO: make the separate function
-        activation_test = []
-        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
-            img = img.to(self._device)
-
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            activation_test.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-        activation_test = np.array(activation_test)
-        mu_test = np.mean(activation_test, axis=0)
-        sigma_test = np.cov(activation_test, rowvar=False)
-        fletcher_distance = calculate_frechet_distance(mu_train, sigma_train, mu_test, sigma_test)
-        return fletcher_distance
-
     @torch.no_grad()
-    def _chamfer_distance(self) -> float:
-        """Computes Chamfer distance between real and generated data
-
-        Returns:
-            float: computed Chamfer distance
-        """
-
-        n_samples = 20_000
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        n_batches = int(n_samples / bs) + 1
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-
-        embeddings = []
-        # real data embeddings
-        for i, (img, lbl) in enumerate(tqdm(dl_val)):
-            img = img.to(self._device)
-
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-
-            embeddings.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-
-        # generated data embeddings
-        for _ in trange(n_batches):
-            label = self._sample_label()
-
-            with torch.no_grad():
-                img = self._g_ema(label)
-                h, _ = self._encoder(img)
-
-            embeddings.extend(h.cpu().numpy())
-        embeddings = np.array(embeddings, dtype=np.float32)
-        tsne_emb = TSNE(n_components=3, n_jobs=16).fit_transform(embeddings)
-        n = len(tsne_emb)
-
-        tsne_real = np.array(tsne_emb[:n//2, ], dtype=np.float32)
-        tsne_fake = np.array(tsne_emb[n//2:, ], dtype=np.float32)
-
-        tsne_real = torch.from_numpy(tsne_real).unsqueeze(0)
-        tsne_fake = torch.from_numpy(tsne_fake).unsqueeze(0)
-
-        chamfer_dist = ChamferDistance()
-        return chamfer_dist(tsne_real, tsne_fake).detach().item()
-
-    def _baseline_chamfer_distance(self) -> float:
-        """Computed baseline Chamfer distance
-
-        Returns:
-            float: baseline Chamfer distance
-        """
-
-        n_samples = 50_000
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        n_batches = int(n_samples / bs) + 1
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
-
-        embeddings_train = []
-        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
-            img = img.to(self._device)
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            embeddings_train.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-
-        embeddings_test = []
-        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
-            img = img.to(self._device)
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            embeddings_test.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-
-        tsne_train = TSNE(n_components=3, n_jobs=16).fit_transform(embeddings_train)
-        tsne_test = TSNE(n_components=3, n_jobs=16).fit_transform(embeddings_test)
-
-        tsne_real = torch.from_numpy(tsne_train).unsqueeze(0)
-        tsne_fake = torch.from_numpy(tsne_test).unsqueeze(0)
-
-        chamfer_dist = ChamferDistance()
-        return chamfer_dist(tsne_real, tsne_fake).detach().item()
-
-    def _compute_inception_kid(self) -> float:
-        """Computes Kernel Inception Distance using features computed using pretrained InceptionV3
-
-        Returns:
-            float: KID (lower - better)
-        """
-
-        n_samples = 50_000
-        encoder = load_patched_inception_v3().to(self._device).eval()
-        self._g_ema.eval()
-
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        n_batches = int(n_samples / bs) + 1
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-
-        real_features = []
-        for i, (img, lbl) in enumerate(tqdm(dl_val, total=n_batches)):
-            img = img.to(self._device)
-
-            if img.shape[2] != 299 or img.shape[3] != 299:
-                img = torch.nn.functional.interpolate(img, size=(299, 299), mode='bicubic')
-
-            with torch.no_grad():
-                feature = encoder(img)[0].flatten(start_dim=1)
-                real_features.extend(feature.cpu().numpy())
-
-            if i == n_batches:
-                break
-
-        real_features = np.array(real_features)
-
-        gen_features = []
-        for _ in trange(n_batches):
-            label = self._sample_label()
-
-            with torch.no_grad():
-                img = self._g_ema(label)
-
-                if img.shape[2] != 299 or img.shape[3] != 299:
-                    img = torch.nn.functional.interpolate(img, size=(299, 299), mode='bicubic')
-
-                feature = encoder(img)[0].flatten(start_dim=1)
-                gen_features.extend(feature.cpu().numpy())
-        gen_features = np.array(gen_features)
-
-        m = 1000  # max subset size
-        num_subsets = 100
-
-        n = real_features.shape[1]
-        t = 0
-        for _ in range(num_subsets):
-            x = gen_features[np.random.choice(gen_features.shape[0], m, replace=False)]
-            y = real_features[np.random.choice(real_features.shape[0], m, replace=False)]
-            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
-            b = (x @ y.T / n + 1) ** 3
-            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
-        kid = t / num_subsets / m
-        return float(kid)
-
-    def _compute_baseline_inception_kid(self) -> float:
-        """Computes baseline Inception KID
-
-        Returns:
-            float: baseline Inception KID
-        """
-
-        n_samples = 50_000
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-        encoder = load_patched_inception_v3().to(self._device).eval()
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
-
-        n_batches = int(n_samples / bs) + 1
-
-        features_train = []
-        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
-            img = img.to(self._device)
-
-            if img.shape[2] != 299 or img.shape[3] != 299:
-                img = torch.nn.functional.interpolate(img, size=(299, 299), mode='bicubic')
-
-            with torch.no_grad():
-                feature = encoder(img)[0].flatten(start_dim=1)
-                features_train.extend(feature.cpu().numpy())
-
-            if i == n_batches:
-                break
-        features_train = np.array(features_train)
-
-        features_test = []
-        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
-            img = img.to(self._device)
-
-            if img.shape[2] != 299 or img.shape[3] != 299:
-                img = torch.nn.functional.interpolate(img, size=(299, 299), mode='bicubic')
-
-            with torch.no_grad():
-                feature = encoder(img)[0].flatten(start_dim=1)
-                features_test.extend(feature.cpu().numpy())
-
-            if i == n_batches:
-                break
-        features_test = np.array(features_test)
-
-        m = 1000  # max subset size
-        num_subsets = 100
-
-        n = features_train.shape[1]
-        t = 0
-        for _ in range(num_subsets):
-            x = features_train[np.random.choice(features_train.shape[0], m, replace=False)]
-            y = features_test[np.random.choice(features_test.shape[0], m, replace=False)]
-            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
-            b = (x @ y.T / n + 1) ** 3
-            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
-        kid = t / num_subsets / m
-        return float(kid)
-
-    def _compute_ssl_kid(self) -> float:
-        """Computes Kernel Inception Distance using features computed using pretrained SimCLR
-
-        Returns:
-            float: KID
-        """
-
-        self._encoder.eval()
-        self._g_ema.eval()
-
-        n_samples = 50_000
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-        n_batches = int(n_samples / bs) + 1
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-
-        real_features = []
-        for i, (img, lbl) in enumerate(tqdm(dl_val, total=n_batches)):
-            img = img.to(self._device)
-
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            real_features.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-        real_features = np.array(real_features)
-
-        gen_features = []
-        for _ in trange(n_batches):
-            label = self._sample_label()
-
-            with torch.no_grad():
-                img = self._g_ema(label)
-                h, _ = self._encoder(img)
-            gen_features.extend(h.cpu().numpy())
-        gen_features = np.array(gen_features)
-
-        m = 1000  # max subset size
-        num_subsets = 100
-
-        n = real_features.shape[1]
-        t = 0
-        for _ in range(num_subsets):
-            x = gen_features[np.random.choice(gen_features.shape[0], m, replace=False)]
-            y = real_features[np.random.choice(real_features.shape[0], m, replace=False)]
-            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
-            b = (x @ y.T / n + 1) ** 3
-            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
-        kid = t / num_subsets / m
-        return kid
-
-    def _compute_baseline_ssl_kid(self) -> float:
-        """Computes baseline Kernel Inception Distance using features computed using pretrained SimCLR
-
-        Returns:
-            float: KID
-        """
-
-        self._encoder.eval()
-
-        n_samples = 50_000
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
-
-        n_batches = int(n_samples / bs) + 1
-
-        features_train = []
-        for i, (img, _) in enumerate(tqdm(dl_val, total=n_batches)):
-            img = img.to(self._device)
-
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            features_train.extend(h.cpu().numpy())
-
-            if i == n_batches:
-                break
-
-        features_train = np.array(features_train)
-
-        features_test = []
-        for i, (img, _) in enumerate(tqdm(dl_test, total=n_batches)):
-            img = img.to(self._device)
-
-            with torch.no_grad():
-                h, _ = self._encoder(img)
-            features_test.extend(h.cpu().numpy())
-            if i == n_batches:
-                break
-
-        features_test = np.array(features_test)
-
-        m = 1000  # max subset size
-        num_subsets = 100
-
-        n = features_train.shape[1]
-        t = 0
-        for _ in range(num_subsets):
-            x = features_train[np.random.choice(features_train.shape[0], m, replace=False)]
-            y = features_test[np.random.choice(features_test.shape[0], m, replace=False)]
-            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
-            b = (x @ y.T / n + 1) ** 3
-            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
-        kid = t / num_subsets / m
-        return kid
-
-    def _compute_morphological_features(self):
+    def _compute_morphological_features(self) -> Dict[str, float]:
         """Computes morphological features for the generator"""
 
         self._g_ema.eval()
@@ -1077,4 +785,293 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
                                               latent_dim=z_size,
                                               plot=True,
                                               plot_path=plot_path)
-        print(f'Eval results: {eval_results}')
+        return eval_results
+
+    @torch.no_grad()
+    def _attribute_control_accuracy(self, build_hist: bool = True) -> Dict:
+        """Computes attribute control accuracy
+
+        Args:
+            build_hist: if True, the histogram of differences for each label will be built and saved
+
+        Returns:
+            Dict: attribute control accuracy for each label
+        """
+
+        n_samples = 50_000
+        bs = self._config['batch_size']
+        n_batches = int(n_samples / bs) + 1
+
+        n_out = self._config['dataset']['n_out']
+        diffs = []
+
+        for _ in trange(n_batches):
+            label = self._sample_label(bs)
+            label = label.to(self._device)
+
+            with torch.no_grad():
+                img = self._g_ema(label)
+                h, _ = self._encoder(img)
+                pred = self._classifier(h)
+
+            diff = (label - pred) ** 2
+            diffs.extend(diff.detach().cpu().numpy())
+
+        diffs = np.array(diffs)
+
+        if build_hist:
+            save_dir = self._writer.checkpoint_folder.parent / 'attribute_control_accuracy'
+            save_dir.mkdir(parents=True, exist_ok=True)
+
+            for i in range(n_out):
+                column = self._columns[i]
+                plt.figure()
+                plt.title(f'{column}. Attribute control accuracy')
+                plt.hist(diffs[:, i], bins=100)
+                plt.savefig(save_dir / f'{column}.png', dpi=300)
+
+        mean_diffs = np.mean(diffs, axis=0)
+
+        result = {}
+        for i in range(n_out):
+            result[self._columns[i]] = mean_diffs[i]
+        return result
+
+    @torch.no_grad()
+    def _baseline_geometric_distance(self) -> float:
+        """Computes baseline geometric distance between features computed using SimCLR
+        for two dataset splits
+
+        Returns:
+            float: baseline geometric distance
+        """
+
+        loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
+
+        bs = self._config['batch_size']
+        n_samples = 20_000
+        n_batches = int(n_samples / bs) + 1
+
+        # load dataset
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+
+        dl_val = infinite_loader(DataLoader(ds_val, bs, shuffle=True, drop_last=True))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, shuffle=True, drop_last=True))
+
+        embeddings_val = []
+        embeddings_test = []
+
+        for _ in trange(n_batches):
+            img_val, _ = next(dl_val)
+            img_val = img_val.to(self._device)
+            img_test, _ = next(dl_test)
+            img_test = img_test.to(self._device)
+
+            with torch.no_grad():
+                h_val, _ = self._encoder(img_val)
+                h_test, _ = self._encoder(img_test)
+
+            embeddings_val.extend(h_val.detach().cpu())
+            embeddings_test.extend(h_test.detach().cpu())
+
+        embeddings_val = torch.stack(embeddings_val)
+        embeddings_test = torch.stack(embeddings_test)
+        distance = loss(embeddings_val, embeddings_test)
+        return distance.detach().cpu().item()
+
+    def _compute_baseline_fid(self) -> float:
+        """Computes baseline FID score
+
+        Returns:
+            float: baseline FID score
+        """
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+
+        fid_score = get_fid_between_datasets(ds_test, ds_val, self._device)
+        return fid_score
+
+    @torch.no_grad()
+    def _compute_baseline_ssl_fid(self) -> float:
+        """Computes baseline FID on features, computed using SimCLR
+
+        Returns:
+            float: baseline SSL FID
+        """
+        n_samples = 50_000
+        bs = self._config['batch_size']
+        n_workers = self._config['n_workers']
+
+        n_batches = int(n_samples / bs) + 1
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
+
+        activations_val = []
+        activations_test = []
+        for _ in trange(n_batches):
+            img_val, _ = next(dl_val)
+            img_val = img_val.to(self._device)
+            img_test, _ = next(dl_test)
+            img_test = img_test.to(self._device)
+
+            with torch.no_grad():
+                h_val, _ = self._encoder(img_val)
+                h_test, _ = self._encoder(img_test)
+
+            activations_val.extend(h_val.cpu().numpy())
+            activations_test.extend(h_test.cpu().numpy())
+
+        activations_val = np.array(activations_val)
+        mu_val = np.mean(activations_val, axis=0)
+        sigma_val = np.cov(activations_val, rowvar=False)
+
+        activations_test = np.array(activations_test)
+        mu_test = np.mean(activations_test, axis=0)
+        sigma_test = np.cov(activations_test, rowvar=False)
+        fletcher_distance = calculate_frechet_distance(mu_val, sigma_val, mu_test, sigma_test)
+        return fletcher_distance
+
+    @torch.no_grad()
+    def _compute_baseline_chamfer_distance(self) -> float:
+        """Computed baseline Chamfer distance
+
+        Returns:
+            float: baseline Chamfer distance
+        """
+
+        n_samples = 20_000
+        bs = self._config['batch_size']
+        n_workers = self._config['n_workers']
+
+        n_batches = int(n_samples / bs) + 1
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
+
+        embeddings_val = []
+        embeddings_test = []
+        for _ in trange(n_batches):
+            img_val, _ = next(dl_val)
+            img_test, _ = next(dl_test)
+            img_val = img_val.to(self._device)
+            img_test = img_test.to(self._device)
+
+            with torch.no_grad():
+                h_val, _ = self._encoder(img_val)
+                h_test, _ = self._encoder(img_test)
+
+            embeddings_val.extend(h_val.cpu().numpy())
+            embeddings_test.extend(h_test.cpu().numpy())
+
+        embeddings_val = np.array(embeddings_val, dtype=np.float32)
+        embeddings_test = np.array(embeddings_test, dtype=np.float32)
+        embeddings = np.concatenate((embeddings_val, embeddings_test))
+        tsne_emb = TSNE(n_components=3, n_jobs=16).fit_transform(embeddings)
+
+        n = len(tsne_emb)
+        tsne_val = np.array(tsne_emb[:n//2, ], dtype=np.float32)
+        tsne_test = np.array(tsne_emb[n//2:, ], dtype=np.float32)
+
+        tsne_val = torch.from_numpy(tsne_val).unsqueeze(0)
+        tsne_test = torch.from_numpy(tsne_test).unsqueeze(0)
+
+        chamfer_dist = ChamferDistance()
+        return chamfer_dist(tsne_val, tsne_test).detach().item()
+
+    @torch.no_grad()
+    def _compute_baseline_kid(self, encoder_type: str = 'simclr') -> float:
+        """Computes baseline KID
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, inception
+
+        Returns:
+            float: KID score
+        """
+
+        if encoder_type not in ['simclr', 'inception']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = load_patched_inception_v3().to(self._device).eval()
+
+        n_samples = 50_000
+        bs = self._config['batch_size']
+        n_workers = self._config['n_workers']
+        n_batches = int(n_samples / bs) + 1
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
+
+        features_val = []
+        features_test = []
+
+        for _ in trange(n_batches):
+            img_val, _ = next(dl_val)
+            img_val = img_val.to(self._device)
+            img_test, _ = next(dl_test)
+            img_test = img_test.to(self._device)
+
+            with torch.no_grad():
+                if encoder_type == 'inception':
+                    img_val = torch.nn.functional.interpolate(img_val, size=(299, 299), mode='bicubic')
+                    img_test = torch.nn.functional.interpolate(img_test, size=(299, 299), mode='bicubic')
+
+                    h_val = encoder(img_val)[0].flatten(start_dim=1)
+                    h_test = encoder(img_test)[0].flatten(start_dim=1)
+                else:
+                    h_val, _ = encoder(img_val)
+                    h_test, _ = encoder(img_test)
+
+            features_val.extend(h_val.cpu().numpy())
+            features_test.extend(h_test.cpu().numpy())
+
+        features_val = np.array(features_val)
+        features_test = np.array(features_test)
+        m = 1000  # max subset size
+        num_subsets = 100
+
+        n = features_val.shape[1]
+        t = 0
+        for _ in range(num_subsets):
+            x = features_val[np.random.choice(features_val.shape[0], m, replace=False)]
+            y = features_test[np.random.choice(features_test.shape[0], m, replace=False)]
+            a = (x @ x.T / n + 1) ** 3 + (y @ y.T / n + 1) ** 3
+            b = (x @ y.T / n + 1) ** 3
+            t += (a.sum() - np.diag(a).sum()) / (m - 1) - b.sum() * 2 / m
+        kid = t / num_subsets / m
+        return float(kid)

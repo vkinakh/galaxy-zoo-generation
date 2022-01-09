@@ -31,6 +31,8 @@ class GalaxyZooConditionalGeneratorTrainer(GeneratorTrainer):
 
         super().__init__(config_path, config)
 
+        print('This class is deprecated. Please use: src/trainer/galaxy_zoo_conditonal_generator_updated.py')
+
         self._start_step, \
             self._generator, self._discriminator, self._g_ema, \
             self._g_optim, self._d_optim, \
@@ -192,6 +194,7 @@ class GalaxyZooConditionalGeneratorTrainer(GeneratorTrainer):
         y_type = self._config['generator']['y_type']
 
         generator = ConditionalGenerator(
+            config=self._config,
             size=img_size,
             y_size=n_classes,
             z_size=z_size,

@@ -13,3 +13,4 @@ from .tsne import tsne_display_tensorboard
 
 from .labeling import make_galaxy_labels_hierarchical
 
+from .metrics import calculate_frechet_distance, slerp

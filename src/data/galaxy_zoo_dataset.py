@@ -64,7 +64,7 @@ class GalaxyZooLabeledDataset(Dataset):
             if 'GalaxyID' not in columns:
                 columns.append('GalaxyID')
             self._annotations = self._annotations[columns]
-        self._columns = list(self._annotations.columns)[:-1]
+        self._columns = list(self._annotations.columns)[1:]  # remove GalaxyID column
 
     def __len__(self) -> int:
         return len(self._image_paths)

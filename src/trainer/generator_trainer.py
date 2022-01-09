@@ -11,7 +11,7 @@ from sklearn.manifold import TSNE
 
 import torch
 from torchvision import transforms, utils
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from chamferdist import ChamferDistance
 from geomloss import SamplesLoss
 
@@ -23,78 +23,10 @@ from src.models import inception_score
 from src.models import vgg16
 from src.utils import PathOrStr
 from src.utils import tsne_display_tensorboard
+from src.utils import calculate_frechet_distance, slerp
 
 
 torch.backends.cudnn.benchmark = True
-
-
-def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
-    """Numpy implementation of the Frechet Distance.
-    The Frechet distance between two multivariate Gaussians X_1 ~ N(mu_1, C_1)
-    and X_2 ~ N(mu_2, C_2) is
-            d^2 = ||mu_1 - mu_2||^2 + Tr(C_1 + C_2 - 2*sqrt(C_1*C_2)).
-
-    Stable version by Dougal J. Sutherland.
-
-    Params:
-    -- mu1   : Numpy array containing the activations of a layer of the features
-               for generated samples.
-    -- mu2   : The sample mean over activations, precalculated on an
-               representative data set.
-    -- sigma1: The covariance matrix over activations for generated samples.
-    -- sigma2: The covariance matrix over activations, precalculated on an
-               representative data set.
-
-    Returns:
-    --   : The Frechet Distance.
-    """
-
-    mu1 = np.atleast_1d(mu1)
-    mu2 = np.atleast_1d(mu2)
-
-    sigma1 = np.atleast_2d(sigma1)
-    sigma2 = np.atleast_2d(sigma2)
-
-    assert mu1.shape == mu2.shape, \
-        'Training and test mean vectors have different lengths'
-    assert sigma1.shape == sigma2.shape, \
-        'Training and test covariances have different dimensions'
-
-    diff = mu1 - mu2
-
-    # Product might be almost singular
-    covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
-    if not np.isfinite(covmean).all():
-        msg = ('fid calculation produces singular product; '
-               'adding %s to diagonal of cov estimates') % eps
-        print(msg)
-        offset = np.eye(sigma1.shape[0]) * eps
-        covmean = linalg.sqrtm((sigma1 + offset).dot(sigma2 + offset))
-
-    # Numerical error might give slight imaginary component
-    if np.iscomplexobj(covmean):
-        if not np.allclose(np.diagonal(covmean).imag, 0, atol=1e-3):
-            m = np.max(np.abs(covmean.imag))
-            raise ValueError('Imaginary component {}'.format(m))
-        covmean = covmean.real
-
-    tr_covmean = np.trace(covmean)
-
-    return (diff.dot(diff) + np.trace(sigma1)
-            + np.trace(sigma2) - 2 * tr_covmean)
-
-
-# Spherical interpolation of a batch of vectors.
-def slerp(a, b, t):
-    a = a / a.norm(dim=-1, keepdim=True)
-    b = b / b.norm(dim=-1, keepdim=True)
-    d = (a * b).sum(dim=-1, keepdim=True)
-    p = t * torch.acos(d)
-    c = b - d * a
-    c = c / c.norm(dim=-1, keepdim=True)
-    d = a * torch.cos(p) + c * torch.sin(p)
-    d = d / d.norm(dim=-1, keepdim=True)
-    return d
 
 
 class GeneratorTrainer(BaseTrainer):
@@ -155,7 +87,7 @@ class GeneratorTrainer(BaseTrainer):
 
         self._display_output_eps()
         self._explore_y()
-        chamfer_dist = self._chamfer_distance()
+        chamfer_dist = self._compute_chamfer_distance()
         self._writer.add_scalar('Chamfer', float(chamfer_dist), 0)
 
         ssl_fid = self._compute_ssl_fid()
@@ -174,7 +106,6 @@ class GeneratorTrainer(BaseTrainer):
         self._writer.add_scalar('KID_SSL', kid_ssl, 0)
 
         self._attribute_control_accuracy()
-        # self._compute_geometric_distance()
 
         self._traverse_zk()
         self._explore_eps()
@@ -186,9 +117,6 @@ class GeneratorTrainer(BaseTrainer):
         Returns:
             float: KID
         """
-
-        self._encoder.eval()
-        self._g_ema.eval()
 
         loader = self._get_dl()
 
@@ -238,7 +166,6 @@ class GeneratorTrainer(BaseTrainer):
         """
 
         encoder = load_patched_inception_v3().to(self._device).eval()
-        self._g_ema.eval()
 
         loader = self._get_dl()
 
@@ -295,7 +222,6 @@ class GeneratorTrainer(BaseTrainer):
         """
 
         encoder = vgg16().to(self._device).eval()
-        self._g_ema.eval()
 
         bs = self._config['batch_size']
         num_samples = 50_000
@@ -330,8 +256,6 @@ class GeneratorTrainer(BaseTrainer):
         lo = np.percentile(dist, 1, interpolation='lower')
         hi = np.percentile(dist, 99, interpolation='higher')
         ppl = np.extract(np.logical_and(dist >= lo, dist <= hi), dist).mean()
-        self._g_ema.train()
-
         return ppl
 
     def _compute_ssl_ppl(self) -> float:
@@ -340,9 +264,6 @@ class GeneratorTrainer(BaseTrainer):
         Returns:
             float: perceptual path length (smaller better)
         """
-
-        self._encoder.eval()
-        self._g_ema.eval()
 
         bs = self._config['batch_size']
         num_samples = 50_000
@@ -376,52 +297,47 @@ class GeneratorTrainer(BaseTrainer):
         hi = np.percentile(dist, 99, interpolation='higher')
         ppl = np.extract(np.logical_and(dist >= lo, dist <= hi), dist).mean()
 
-        self._encoder.train()
-        self._g_ema.train()
-
         return ppl
 
+    @torch.no_grad()
     def _compute_ssl_fid(self) -> float:
         """Computes FID on SSL features
 
         Returns:
             float: FID
         """
+        n_samples = 50_000
+        bs = self._config['batch_size']
+        n_batches = int(n_samples / bs) + 1
+        dl = self._get_dl()
 
-        self._encoder.eval()
-        n_batches = 200
+        # compute activations
+        activations_real = []
+        activations_fake = []
 
-        loader = self._get_dl()
-
-        # compute stats for real dataset
-        real_activations = []
         for _ in trange(n_batches):
-            img, _ = next(loader)
+            img, lbl = next(dl)
             img = img.to(self._device)
+            lbl = lbl.to(self._device)
 
             with torch.no_grad():
+                img_gen = self._g_ema(lbl)
+
                 h, _ = self._encoder(img)
-            real_activations.extend(h.cpu().numpy())
-        real_activations = np.array(real_activations)
-        mu_real = np.mean(real_activations, axis=0)
-        sigma_real = np.cov(real_activations, rowvar=False)
+                h_gen, _ = self._encoder(img_gen)
 
-        # compute stats for fake dataset
-        fake_activations = []
-        for _ in trange(n_batches):
-            label = self._sample_label()
+            activations_real.extend(h.cpu().numpy())
+            activations_fake.extend(h_gen.cpu().numpy())
 
-            with torch.no_grad():
-                img = self._g_ema(label)
-                h, _ = self._encoder(img)
-            fake_activations.extend(h.cpu().numpy())
-        fake_activations = np.array(fake_activations)
+        activations_real = np.array(activations_real)
+        activations_fake = np.array(activations_fake)
 
-        mu_fake = np.mean(fake_activations, axis=0)
-        sigma_fake = np.cov(fake_activations, rowvar=False)
+        mu_real = np.mean(activations_real, axis=0)
+        sigma_real = np.cov(activations_real, rowvar=False)
 
+        mu_fake = np.mean(activations_fake, axis=0)
+        sigma_fake = np.cov(activations_fake, rowvar=False)
         fletcher_distance = calculate_frechet_distance(mu_fake, sigma_fake, mu_real, sigma_real)
-        self._encoder.train()
         return fletcher_distance
 
     def _compute_geometric_distance(self) -> torch.Tensor:
@@ -488,7 +404,7 @@ class GeneratorTrainer(BaseTrainer):
             result[self._columns[i]] = mean_diffs[i]
         return result
 
-    def _chamfer_distance(self) -> float:
+    def _compute_chamfer_distance(self) -> float:
         """Computes Chamfer distance between real and generated data
 
         Returns:
@@ -746,6 +662,7 @@ class GeneratorTrainer(BaseTrainer):
 
         return transform
 
+    @torch.no_grad()
     def _compute_fid_score(self) -> float:
         """Computes FID score for the dataset
 
@@ -753,17 +670,22 @@ class GeneratorTrainer(BaseTrainer):
             float: FID score
         """
 
+        n_samples = 50_000
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = 299
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        dataset = make_dl.dataset_valid
+        ds_valid = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        ds = ConcatDataset([ds_valid, ds_test])
 
-        fid_func = get_fid_fn(dataset, self._device, 50_000)
-        fid_score = fid_func(self._g_ema)
+        fid_func = get_fid_fn(ds, self._device, n_samples)
+        with torch.no_grad():
+            fid_score = fid_func(self._g_ema)
         return fid_score
 
+    @torch.no_grad()
     def _compute_inception_score(self) -> float:
         """Computes inception score for the dataset
 
@@ -771,9 +693,13 @@ class GeneratorTrainer(BaseTrainer):
             float: inception score
         """
 
-        batch_size = self._config['batch_size']
-        dataset = GANDataset(self._g_ema, n=100_000)
-        score = inception_score(dataset, batch_size=batch_size, resize=True)[0]
+        n_samples = 50_000
+
+        bs = self._config['batch_size']
+        dataset = GANDataset(self._g_ema, n=n_samples)
+
+        with torch.no_grad():
+            score = inception_score(dataset, batch_size=bs, resize=True)[0]
         return score
 
     def _sample_label(self, n: Optional[int] = None) -> torch.Tensor:

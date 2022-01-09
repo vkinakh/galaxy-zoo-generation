@@ -1,6 +1,6 @@
 from typing import Optional, Callable, List
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 from src.data import GalaxyZooLabeledDataset
 from src.utils import PathOrStr
@@ -43,7 +43,17 @@ def get_dataset(name: str,
     return dataset
 
 
-def infinite_loader(data_loader):
+def infinite_loader(data_loader: DataLoader):
+    """Infinitely returns batches from the data loader.
+    Useful for training GANs
+
+    Args:
+        data_loader: data loader to load from
+
+    Yields:
+        batch
+    """
+
     while True:
         for batch in data_loader:
             yield batch
