@@ -80,7 +80,8 @@ def compute_distance_measures_group(
         measures_target.group(group).torch())
 
 
-def evaluate_generator(dataloader, generator, latent_dim=128, plot=False, plot_path="~/Pictures/"):
+def evaluate_generator(dataloader, generator, latent_dim=128, plot=False, plot_path="~/Pictures/",
+                       normalize: bool = True):
     """ evaluate galaxy image generator by computing the distance between
         morphology measures obtained from real images and
         morphology measures obtained from images generated from same labels.
@@ -97,6 +98,8 @@ def evaluate_generator(dataloader, generator, latent_dim=128, plot=False, plot_p
     plot: boolean
             if True: plot corner plots for all groups
 
+    normalize: boolean
+            if True: output images will be renormalized with mean 0.5 and std 0.5
     Output
     ------
     distances: dict
@@ -108,13 +111,17 @@ def evaluate_generator(dataloader, generator, latent_dim=128, plot=False, plot_p
     target = Measures()
     source = Measures()
     for images, labels in tqdm(dataloader):
-        images = (images * 0.5) + 0.5
+
+        if normalize:
+            images = (images * 0.5) + 0.5
         measures_target = get_morphology_measures_set(images)
         labels = labels.to(device)
         latent = torch.randn(len(images), latent_dim).to(device)
 
         images = generator(y=labels, eps=latent)
-        images = (images * 0.5) + 0.5
+
+        if normalize:
+            images = (images * 0.5) + 0.5
 
         measures_generated = get_morphology_measures_set(images)
         target += measures_target
