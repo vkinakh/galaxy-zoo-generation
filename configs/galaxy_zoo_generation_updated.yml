@@ -1,25 +1,25 @@
-batch_size: 128       # batch size to use, when training generator
-epochs: 250   # number of total training steps
-cls_reg_every: 8      # how often to apply classification regularization
-d_reg_every: 16       # how often to apply d regularization
+batch_size: 64        # batch size to use, when training generator
+epochs: 250           # number of total training steps
+cls_reg_every: 8      # how often to apply classification regularization (steps)
+d_reg_every: 16       # how often to apply d regularization (steps)
 d_reg: 10.0           # d regularization parameter
 orth_reg: 100.0       # generator orthogonal regularization parameter
 
-save_every: 10
-log_every: 100     # how often to log losses to tensorboard
-sample_every: 500  # how often to save generated images
-n_workers: 16       # number of workers in dataloader
-lr: 1e-4           # learning rate
-fid: True         # if True, then FID will be calculated when saving checkpoint model
+save_every: 10       # how often to save the model (epochs)
+log_every: 100       # how often to log losses to tensorboard (steps)
+sample_every: 500    # how often to save generated images (steps)
+n_workers: 16        # number of workers in dataloader
+lr: 1e-4             # learning rate
+fid: True            # if True, then FID will be calculated when saving checkpoint model
 
-fine_tune_from: ./runs/Dec08_13-49-10_wyner_galaxy_zoo_generation_patch_lsgan_noise_0.1/checkpoint/0000250.pt # path to model, to fine tune from
+fine_tune_from: # path to model, to fine tune from
 
 loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsgan'
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/  # path to folder with images
-  anno: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv          # path to file with attribute annotations
+  path: <>          # path to folder with images
+  anno: <>          # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
   n_channels: 3     # number of channels in image
@@ -37,7 +37,7 @@ generator:             # generator parameters
   z_size: 512          # z vector size
   n_basis: 6           # size of the z1, ... zk input variables
   noise_size: 512      # size of the generator input (generator input is attributes mixed with z vector sampled from N(0, 1))
-  y_type: real  # type of attributes. Choices: 'one_hot' and 'multi_label'
+  y_type: real         # type of attributes
 
 discriminator:    # discriminator parameters
   type: patch     # type of discriminator. Choices: 'global' and 'patch'
@@ -45,4 +45,4 @@ discriminator:    # discriminator parameters
   ndf: 64
   n_layers: 4
 
-comment: galaxy_zoo_generation_patch_lsgan_250_eval_morph
+comment: galaxy_zoo_generation

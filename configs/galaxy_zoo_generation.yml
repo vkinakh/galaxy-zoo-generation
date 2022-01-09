@@ -1,3 +1,5 @@
+# THIS CONFIG FILE IS DEPRECATED. PLEASE USE: galaxy_zoo_generation_updated.yml
+
 batch_size: 2       # batch size to use, when training generator
 total_steps: 200000   # number of total training steps
 cls_reg_every: 8      # how often to apply classification regularization
@@ -18,8 +20,8 @@ loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsga
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: /Users/vitaliykinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1  # path to folder with images
-  anno: /Users/vitaliykinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv          # path to file with attribute annotations
+  path: <>          # path to folder with images
+  anno: <>          # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
   n_channels: 3     # number of channels in image
@@ -45,4 +47,4 @@ discriminator:    # discriminator parameters
   ndf: 64
   n_layers: 4
 
-comment: galaxy_zoo_generation_patch_lsgan
+comment: galaxy_zoo_generation
