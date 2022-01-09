@@ -11,9 +11,10 @@ from sklearn.manifold import TSNE
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from torchvision import utils
 from chamferdist import ChamferDistance
+from geomloss import SamplesLoss
 
 from .generator_trainer import GeneratorTrainer, calculate_frechet_distance
 from src.models import ConditionalGenerator
@@ -158,11 +159,16 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         kid_ssl = self._compute_ssl_kid()
         self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
-        self._writer.close()
 
         self._compute_morphological_features()
 
+        geometric_dist = self._compute_geometric_distance()
+        self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
+        self._writer.close()
+
     def compute_baseline(self) -> NoReturn:
+        """Computes baseline metrics"""
+
         fid_score = self._baseline_ssl_fid()
         self._writer.add_scalar('baseline/FID', fid_score, 0)
 
@@ -177,6 +183,9 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         kid_ssl = self._compute_baseline_ssl_kid()
         self._writer.add_scalar('baseline/SSL_KID', kid_ssl, 0)
+
+        geom_dist = self._baseline_geometric_distance()
+        self._writer.add_scalar('baseline/Geometric_dist', geom_dist, 0)
         self._writer.close()
 
     def _step_g(self):
@@ -455,6 +464,101 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         labels = make_galaxy_labels_hierarchical(labels)
         labels = labels.to(self._device)
         return labels
+
+    @torch.no_grad()
+    def _baseline_geometric_distance(self) -> float:
+        """Computes baseline geometric distance between features computed using SimCLR
+        for two dataset splits
+
+        Returns:
+            float: baseline geometric distance
+        """
+
+        loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
+
+        bs = self._config['batch_size']
+        n_samples = 20_000
+        n_batches = int(n_samples / bs) + 1
+
+        # load dataset
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+
+        dl_val = infinite_loader(DataLoader(ds_val, bs, shuffle=True, drop_last=True))
+        dl_test = infinite_loader(DataLoader(ds_test, bs, shuffle=True, drop_last=True))
+
+        embeddings_val = []
+        embeddings_test = []
+
+        for _ in trange(n_batches):
+            img_val, _ = next(dl_val)
+            img_val = img_val.to(self._device)
+            img_test, _ = next(dl_test)
+            img_test = img_test.to(self._device)
+
+            with torch.no_grad():
+                h_val, _ = self._encoder(img_val)
+                h_test, _ = self._encoder(img_test)
+
+            embeddings_val.extend(h_val.detach().cpu())
+            embeddings_test.extend(h_test.detach().cpu())
+
+        embeddings_val = torch.stack(embeddings_val)
+        embeddings_test = torch.stack(embeddings_test)
+        distance = loss(embeddings_val, embeddings_test)
+        return distance.detach().cpu().item()
+
+    @torch.no_grad()
+    def _compute_geometric_distance(self) -> float:
+        """Computes geometric distance between real and generated samples using
+        features computed using SimCLR
+
+        Returns:
+              float: geometric distance
+        """
+
+        loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
+
+        bs = self._config['batch_size']
+        n_samples = 20_000
+        n_batches = int(n_samples / bs) + 1
+
+        # load dataset
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
+        ds_val = make_dl.dataset_valid
+        ds_test = make_dl.dataset_test
+        ds = ConcatDataset([ds_test, ds_val])
+        dl = infinite_loader(DataLoader(ds, bs, shuffle=True, drop_last=True))
+
+        embeddings_real = []
+        embeddings_gen = []
+
+        for _ in trange(n_batches):
+            img, lbl = next(dl)
+            img = img.to(self._device)
+            lbl = lbl.to(self._device)
+
+            with torch.no_grad():
+                img_gen = self._g_ema(lbl)
+                h, _ = self._encoder(img)
+                h_gen, _ = self._encoder(img_gen)
+
+            embeddings_real.extend(h.detach().cpu())
+            embeddings_gen.extend(h_gen.detach().cpu())
+
+        embeddings_real = torch.stack(embeddings_real)
+        embeddings_gen = torch.stack(embeddings_gen)
+        distance = loss(embeddings_real, embeddings_gen)
+        return distance.detach().cpu().item()
 
     def _baseline_ssl_fid(self) -> float:
         """Computes baseline FID score

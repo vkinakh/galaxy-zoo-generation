@@ -16,7 +16,7 @@ from chamferdist import ChamferDistance
 from geomloss import SamplesLoss
 
 from .base_trainer import BaseTrainer
-from src.data import GenDataset, get_dataset, infinite_loader, GANDataset
+from src.data import get_dataset, infinite_loader, GANDataset
 from src.data.dataset_updated import MakeDataLoader
 from src.models.fid import get_fid_fn, load_patched_inception_v3
 from src.models import inception_score
