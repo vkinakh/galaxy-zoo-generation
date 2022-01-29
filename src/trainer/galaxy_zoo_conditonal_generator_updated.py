@@ -869,28 +869,30 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
 
         bs = self._config['batch_size']
-        n_samples = 20_000
-        n_batches = int(n_samples / bs) + 1
+        # n_samples = 20_000
+        # n_batches = int(n_samples / bs) + 1
 
         # load dataset
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        # ds_val = make_dl.dataset_valid
+        # ds_test = make_dl.dataset_test
+        # dl_val = infinite_loader(DataLoader(ds_val, bs, shuffle=True, drop_last=True))
+        # dl_test = infinite_loader(DataLoader(ds_test, bs, shuffle=True, drop_last=True))
 
-        dl_val = infinite_loader(DataLoader(ds_val, bs, shuffle=True, drop_last=True))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, shuffle=True, drop_last=True))
+        dl_val = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
 
         embeddings_val = []
         embeddings_test = []
 
-        for _ in trange(n_batches):
-            img_val, _ = next(dl_val)
+        for batch_val, batch_test in zip(dl_val, dl_test):
+            img_val, _ = batch_val
             img_val = img_val.to(self._device)
-            img_test, _ = next(dl_test)
+            img_test, _ = batch_test
             img_test = img_test.to(self._device)
 
             with torch.no_grad():
@@ -916,11 +918,13 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
         ds_val = make_dl.dataset_valid
         ds_test = make_dl.dataset_test
 
-        fid_score = get_fid_between_datasets(ds_test, ds_val, self._device)
+        num_samples = min(len(ds_val), len(ds_test))
+
+        fid_score = get_fid_between_datasets(ds_test, ds_val, self._device, num_samples)
         return fid_score
 
     @torch.no_grad()
@@ -930,27 +934,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         Returns:
             float: baseline SSL FID
         """
-        n_samples = 50_000
         bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
 
-        n_batches = int(n_samples / bs) + 1
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_val = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
 
         activations_val = []
         activations_test = []
-        for _ in trange(n_batches):
-            img_val, _ = next(dl_val)
+
+        for batch_val, batch_test in zip(dl_val, dl_test):
+            img_val, _ = batch_val
             img_val = img_val.to(self._device)
-            img_test, _ = next(dl_test)
+            img_test, _ = batch_test
             img_test = img_test.to(self._device)
 
             with torch.no_grad():
@@ -978,26 +978,20 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: baseline Chamfer distance
         """
 
-        n_samples = 20_000
         bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        n_batches = int(n_samples / bs) + 1
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_val = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
 
         embeddings_val = []
         embeddings_test = []
-        for _ in trange(n_batches):
-            img_val, _ = next(dl_val)
-            img_test, _ = next(dl_test)
+        for batch_val, batch_test in zip(dl_val, dl_test):
+            img_val, _ = batch_val
+            img_test, _ = batch_test
             img_val = img_val.to(self._device)
             img_test = img_test.to(self._device)
 
@@ -1042,28 +1036,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         else:
             encoder = load_patched_inception_v3().to(self._device).eval()
 
-        n_samples = 50_000
         bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-        n_batches = int(n_samples / bs) + 1
 
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        dl_val = infinite_loader(DataLoader(ds_val, bs, True, num_workers=n_workers))
-        dl_test = infinite_loader(DataLoader(ds_test, bs, True, num_workers=n_workers))
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_val = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
 
         features_val = []
         features_test = []
 
-        for _ in trange(n_batches):
-            img_val, _ = next(dl_val)
+        for batch_val, batch_test in zip(dl_val, dl_test):
+            img_val, _ = batch_val
             img_val = img_val.to(self._device)
-            img_test, _ = next(dl_test)
+            img_test, _ = batch_test
             img_test = img_test.to(self._device)
 
             with torch.no_grad():
