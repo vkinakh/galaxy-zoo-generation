@@ -63,7 +63,7 @@ class GeneratorTrainer(BaseTrainer):
         """Saves model to checkpoint"""
         pass
 
-    def evaluate(self) -> NoReturn:
+    def evaluate(self) -> None:
         """Evaluates the model by computing:
 
         - FID score
@@ -111,6 +111,7 @@ class GeneratorTrainer(BaseTrainer):
         self._explore_eps()
         self._explore_eps_zs()
 
+    @torch.no_grad()
     def _compute_ssl_kid(self) -> float:
         """Computes Kernel Inception Distance using features computed using pretrained SimCLR
 
@@ -158,6 +159,7 @@ class GeneratorTrainer(BaseTrainer):
         kid = t / num_subsets / m
         return kid
 
+    @torch.no_grad()
     def _compute_inception_kid(self) -> float:
         """Computes Kernel Inception Distance using features computed using pretrained InceptionV3
 
@@ -214,6 +216,7 @@ class GeneratorTrainer(BaseTrainer):
         kid = t / num_subsets / m
         return float(kid)
 
+    @torch.no_grad()
     def _compute_vgg16_ppl(self) -> float:
         """Computes perceptual path length using features computed using pretrained VGG16
 
@@ -258,6 +261,7 @@ class GeneratorTrainer(BaseTrainer):
         ppl = np.extract(np.logical_and(dist >= lo, dist <= hi), dist).mean()
         return ppl
 
+    @torch.no_grad()
     def _compute_ssl_ppl(self) -> float:
         """Computes perceptual path length using features computed using SimCLR
 
@@ -340,6 +344,7 @@ class GeneratorTrainer(BaseTrainer):
         fletcher_distance = calculate_frechet_distance(mu_fake, sigma_fake, mu_real, sigma_real)
         return fletcher_distance
 
+    @torch.no_grad()
     def _compute_geometric_distance(self) -> torch.Tensor:
 
         n_batches = 200
@@ -373,6 +378,7 @@ class GeneratorTrainer(BaseTrainer):
         distance = loss(real_embeddings, fake_embeddings)
         return distance
 
+    @torch.no_grad()
     def _attribute_control_accuracy(self) -> Dict:
         """Computes attribute control accuracy
 
@@ -404,6 +410,7 @@ class GeneratorTrainer(BaseTrainer):
             result[self._columns[i]] = mean_diffs[i]
         return result
 
+    @torch.no_grad()
     def _compute_chamfer_distance(self) -> float:
         """Computes Chamfer distance between real and generated data
 
@@ -447,7 +454,8 @@ class GeneratorTrainer(BaseTrainer):
         chamfer_dist = ChamferDistance()
         return chamfer_dist(tsne_real, tsne_fake).detach().item()
 
-    def _explore_eps_zs(self) -> NoReturn:
+    @torch.no_grad()
+    def _explore_eps_zs(self) -> None:
         """Explores generated images with fixed epsilon and x1, ..., xk vectors"""
 
         traverse_samples = 8
@@ -478,7 +486,8 @@ class GeneratorTrainer(BaseTrainer):
             log_folder / 'explore_eps_zs.png'
         )
 
-    def _explore_eps(self) -> NoReturn:
+    @torch.no_grad()
+    def _explore_eps(self) -> None:
         """Explores generated images with fixed epsilon"""
 
         traverse_samples = 8
@@ -506,7 +515,8 @@ class GeneratorTrainer(BaseTrainer):
             log_folder / 'traverse_eps.png'
         )
 
-    def _traverse_zk(self) -> NoReturn:
+    @torch.no_grad()
+    def _traverse_zk(self) -> None:
         """Explores generated images by traversing the dimensions in z1, ..., zk vectors"""
 
         batch_size = self._config['batch_size']
@@ -554,7 +564,8 @@ class GeneratorTrainer(BaseTrainer):
                     log_folder / f"traverse_L{i_layer}_D{i_dim}.png"
                 )
 
-    def _explore_y(self) -> NoReturn:
+    @torch.no_grad()
+    def _explore_y(self) -> None:
         """Generates and saves images from random labels"""
 
         n = 49
@@ -574,7 +585,8 @@ class GeneratorTrainer(BaseTrainer):
         log_folder.mkdir(exist_ok=True, parents=True)
         Image.fromarray(imgs).save(log_folder / 'explore_y.png')
 
-    def _display_output_eps(self) -> NoReturn:
+    @torch.no_grad()
+    def _display_output_eps(self) -> None:
         """Displays TSNE of the epsilon from real dataset and from generated dataset"""
 
         n_classes = self._config['dataset']['n_out']
@@ -670,15 +682,14 @@ class GeneratorTrainer(BaseTrainer):
             float: FID score
         """
 
-        n_samples = 50_000
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = 299
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
-        ds_valid = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        ds = ConcatDataset([ds_valid, ds_test])
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        ds = make_dl.dataset_test
+
+        n_samples = len(ds)
 
         fid_func = get_fid_fn(ds, self._device, n_samples)
         with torch.no_grad():

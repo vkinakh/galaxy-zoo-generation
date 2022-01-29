@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 from .blocks import EigenBlock, ConvLayer, SubspaceLayer
-from src.data import get_dataset
+from src.data.dataset_updated import MakeDataLoader
 
 
 class ConditionalGenerator(nn.Module):
@@ -73,12 +73,14 @@ class ConditionalGenerator(nn.Module):
 
     def _get_ds(self):
 
-        name = self._config['dataset']['name']
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
-        columns = None if 'columns' not in self._config['dataset'] else self._config['dataset']['columns']
-        dataset = get_dataset(name, path, anno_file=anno, columns=columns)
-        return dataset
+        size = self._config['dataset']['size']
+
+        dl = MakeDataLoader(path, anno, size)
+        ds_valid = dl.dataset_valid
+
+        return ds_valid
 
     def forward(self,
                 y: torch.Tensor,
@@ -115,7 +117,7 @@ class ConditionalGenerator(nn.Module):
         for _ in range(n):
             idx = random.randrange(len(self._sample_ds))
             _, label = self._sample_ds[idx]
-            labels.append(torch.from_numpy(label))
+            labels.append(label)
 
         labels = torch.stack(labels).to(device)
         return self.forward(labels)

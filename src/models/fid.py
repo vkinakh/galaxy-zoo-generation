@@ -39,7 +39,23 @@ def extract_loader_features(loader, inception, device):
 
 
 @torch.no_grad()
-def extract_model_features(model, inception, device, num_samples=50_000, batch_size=64):
+def extract_model_features(model: nn.Module,
+                           inception: nn.Module,
+                           device,
+                           num_samples: int = 50_000,
+                           batch_size: int = 64) -> torch.Tensor:
+    """Extracts features from generated samples
+
+    Args:
+        model: image generation model
+        inception: Inception model, which computed features
+        device:
+        num_samples: number of samples to generate
+        batch_size: batch size to use, when generating
+
+    Returns:
+        torch.Tensor: extracted features
+    """
 
     num_iters = int(np.ceil(num_samples / batch_size))
 
