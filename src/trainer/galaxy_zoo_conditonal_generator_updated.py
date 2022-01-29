@@ -572,6 +572,9 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
     def _compute_fid(self, encoder_type: str = 'simclr') -> float:
         """Computes FID on custom features
 
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, ae
+
         Returns:
             float: FID
         """

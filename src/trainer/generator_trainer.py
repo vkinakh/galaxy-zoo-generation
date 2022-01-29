@@ -682,6 +682,8 @@ class GeneratorTrainer(BaseTrainer):
             float: FID score
         """
 
+        bs = self._config['batch_size']
+
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = 299
@@ -690,7 +692,7 @@ class GeneratorTrainer(BaseTrainer):
         ds = make_dl.dataset_test
 
         n_samples = len(ds)
-        fid_func = get_fid_fn(ds, self._device, n_samples)
+        fid_func = get_fid_fn(ds, self._device, bs, n_samples)
         with torch.no_grad():
             fid_score = fid_func(self._g_ema)
         return fid_score

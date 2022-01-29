@@ -132,7 +132,7 @@ def get_fid_between_datasets(dataset_a: Dataset,
     return compute_fid(mean_a, cov_a, mean_b, cov_b)
 
 
-def get_fid_fn(dataset, device, num_samples=50_000):
+def get_fid_fn(dataset, device, batch_size: int, num_samples: int = 50_000):
     inception = load_patched_inception_v3().eval().to(device)
 
     loader = DataLoader(dataset, batch_size=128, shuffle=False, drop_last=False, num_workers=8)
