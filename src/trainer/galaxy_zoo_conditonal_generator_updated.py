@@ -158,23 +158,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         - epsilon and z1, ..., zk latent dimensions
         """
 
-        # fid_score = self._compute_fid_score()
-        # self._writer.add_scalar('eval/FID', fid_score, 0)
+        fid_score = self._compute_fid_score()
+        self._writer.add_scalar('eval/FID', fid_score, 0)
 
-        # i_score = self._compute_inception_score()
-        # self._writer.add_scalar('eval/IS', i_score, 0)
+        i_score = self._compute_inception_score()
+        self._writer.add_scalar('eval/IS', i_score, 0)
 
-        # chamfer_dist = self._compute_chamfer_distance()
-        # self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
+        chamfer_dist = self._compute_chamfer_distance()
+        self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
-        # ssl_fid = self._compute_ssl_fid()
-        # self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
+        ssl_fid = self._compute_ssl_fid()
+        self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
-        # ssl_ppl = self._compute_ppl('simclr')
-        # self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
+        ssl_ppl = self._compute_ppl('simclr')
+        self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
 
-        # vgg_ppl = self._compute_ppl('vgg')
-        # self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
+        vgg_ppl = self._compute_ppl('vgg')
+        self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
 
         kid_inception = self._compute_kid('inception')
         self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
@@ -182,18 +182,18 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         kid_ssl = self._compute_kid('simclr')
         self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
 
-        # morp_res = self._compute_morphological_features()
-        # self._log('eval/morphological', morp_res, 0)
+        morp_res = self._compute_morphological_features()
+        self._log('eval/morphological', morp_res, 0)
 
-        # geometric_dist = self._compute_geometric_distance()
-        # self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
+        geometric_dist = self._compute_geometric_distance()
+        self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
 
-        # attribute_accuracy = self._attribute_control_accuracy()
-        # self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
+        attribute_accuracy = self._attribute_control_accuracy()
+        self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
 
-        # self._traverse_zk()
-        # self._explore_eps()
-        # self._explore_eps_zs()
+        self._traverse_zk()
+        self._explore_eps()
+        self._explore_eps_zs()
 
         self._writer.close()
 
@@ -741,25 +741,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
 
         bs = self._config['batch_size']
-        n_samples = 20_000
-        n_batches = int(n_samples / bs) + 1
 
         # load dataset
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        ds = ConcatDataset([ds_test, ds_val])
-        dl = infinite_loader(DataLoader(ds, bs, shuffle=True, drop_last=True))
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_valid = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
 
         embeddings_real = []
         embeddings_gen = []
 
-        for _ in trange(n_batches):
-            img, lbl = next(dl)
+        for batch_val, batch_test in zip(dl_valid, dl_test):
+            _, lbl = batch_val
+            img, _ = batch_test
+
             img = img.to(self._device)
             lbl = lbl.to(self._device)
 
