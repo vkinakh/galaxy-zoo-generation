@@ -690,7 +690,6 @@ class GeneratorTrainer(BaseTrainer):
         ds = make_dl.dataset_test
 
         n_samples = len(ds)
-
         fid_func = get_fid_fn(ds, self._device, n_samples)
         with torch.no_grad():
             fid_score = fid_func(self._g_ema)
@@ -704,8 +703,12 @@ class GeneratorTrainer(BaseTrainer):
             float: inception score
         """
 
-        n_samples = 50_000
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
 
+        n_samples = len(make_dl.dataset_valid)
         bs = self._config['batch_size']
         dataset = GANDataset(self._g_ema, n=n_samples)
 
