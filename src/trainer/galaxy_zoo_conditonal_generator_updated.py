@@ -167,8 +167,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         # chamfer_dist = self._compute_chamfer_distance()
         # self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
-        ssl_fid = self._compute_ssl_fid()
-        self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
+        # ssl_fid = self._compute_ssl_fid()
+        # self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
         # ssl_ppl = self._compute_ppl('simclr')
         # self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
@@ -176,11 +176,11 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         # vgg_ppl = self._compute_ppl('vgg')
         # self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
 
-        # kid_inception = self._compute_kid('inception')
-        # self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
+        kid_inception = self._compute_kid('inception')
+        self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
 
-        # kid_ssl = self._compute_kid('simclr')
-        # self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
+        kid_ssl = self._compute_kid('simclr')
+        self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
 
         # morp_res = self._compute_morphological_features()
         # self._log('eval/morphological', morp_res, 0)
@@ -676,17 +676,22 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         else:
             encoder = load_patched_inception_v3().to(self._device).eval()
 
-        n_samples = 50_000
         bs = self._config['batch_size']
-        n_batches = int(n_samples / bs) + 1
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
 
-        dl = self._get_eval_dl()
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_valid = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
 
         features_real = []
         features_gen = []
 
-        for _ in trange(n_batches):
-            img, lbl = next(dl)
+        for batch_val, batch_test in zip(dl_valid, dl_test):
+            _, lbl = batch_val
+            img, _ = batch_test
+
             img = img.to(self._device)
             lbl = lbl.to(self._device)
 
