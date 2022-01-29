@@ -3,6 +3,7 @@ import copy
 from functools import partial
 import random
 from pathlib import Path
+from pprint import pprint
 
 from tqdm import trange, tqdm
 import numpy as np
@@ -159,48 +160,61 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         - epsilon and z1, ..., zk latent dimensions
         """
 
-        # fid_score = self._compute_fid_score()
-        # self._writer.add_scalar('eval/FID', fid_score, 0)
+        fid_score = self._compute_fid_score()
+        self._writer.add_scalar('eval/FID', fid_score, 0)
 
-        # i_score = self._compute_inception_score()
-        # self._writer.add_scalar('eval/IS', i_score, 0)
+        i_score = self._compute_inception_score()
+        self._writer.add_scalar('eval/IS', i_score, 0)
 
-        # chamfer_dist = self._compute_chamfer_distance()
-        # self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
+        chamfer_dist = self._compute_chamfer_distance('simclr')
+        self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
-        # ssl_fid = self._compute_ssl_fid()
-        # self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
+        chamfer_ae = self._compute_chamfer_distance('ae')
+        self._writer.add_scalar('eval/Chamfer_AE', float(chamfer_ae), 0)
 
-        # ssl_ppl = self._compute_ppl('simclr')
-        # self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
+        ssl_fid = self._compute_fid('simclr')
+        self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
-        # vgg_ppl = self._compute_ppl('vgg')
-        # self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
+        ae_fid = self._compute_fid('ae')
+        self._writer.add_scalar('eval/AE_FID', ae_fid, 0)
 
-        # kid_inception = self._compute_kid('inception')
-        # self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
+        ssl_ppl = self._compute_ppl('simclr')
+        self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
 
-        # kid_ssl = self._compute_kid('simclr')
-        # self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
+        vgg_ppl = self._compute_ppl('vgg')
+        self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
 
-        # morp_res = self._compute_morphological_features()
-        # self._log('eval/morphological', morp_res, 0)
+        ae_ppl = self._compute_ppl('ae')
+        self._writer.add_scalar('eval/AE_PPL', ae_ppl, 0)
 
-        # geometric_dist = self._compute_geometric_distance()
-        # self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
+        kid_inception = self._compute_kid('inception')
+        self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
 
-        # attribute_accuracy = self._attribute_control_accuracy()
-        # self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
+        kid_ssl = self._compute_kid('simclr')
+        self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
+
+        kid_ae = self._compute_kid('ae')
+        self._writer.add_scalar('eval/KID_AE', kid_ae, 0)
+
+        morp_res = self._compute_morphological_features()
+        self._log('eval/morphological', morp_res, 0)
+
+        geometric_dist = self._compute_geometric_distance('simclr')
+        self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
+
+        geometric_dist_ae = self._compute_geometric_distance('ae')
+        self._writer.add_scalar('eval/AE_Geometric_dist', geometric_dist_ae, 0)
+
+        attribute_accuracy = self._attribute_control_accuracy()
+        self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
 
         res_dist_measures = self._compute_distribution_measures()
-        # self._log('eval/distribution_measures', res_dist_measures, 0)
-
-        from pprint import pprint
+        print('distribution measures:')
         pprint(res_dist_measures)
 
-        # self._traverse_zk()
-        # self._explore_eps()
-        # self._explore_eps_zs()
+        self._traverse_zk()
+        self._explore_eps()
+        self._explore_eps_zs()
 
         self._writer.close()
 
@@ -210,11 +224,17 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         fid_score = self._compute_baseline_fid()
         self._writer.add_scalar('baseline/FID', fid_score, 0)
 
-        fid_ssl = self._compute_baseline_ssl_fid()
+        fid_ssl = self._compute_baseline_ssl_fid('simclr')
         self._writer.add_scalar('baseline/SSL_FID', fid_ssl, 0)
 
-        chamfer_dist = self._compute_baseline_chamfer_distance()
+        fid_ae = self._compute_baseline_ssl_fid('ae')
+        self._writer.add_scalar('baseline/AE_FID', fid_ae, 0)
+
+        chamfer_dist = self._compute_baseline_chamfer_distance('simclr')
         self._writer.add_scalar('baseline/Chamfer', chamfer_dist, 0)
+
+        chamfer_dist = self._compute_baseline_chamfer_distance('ae')
+        self._writer.add_scalar('baseline/AE_Chamfer', chamfer_dist, 0)
 
         kid = self._compute_baseline_kid('inception')
         self._writer.add_scalar('baseline/KID_Inception', kid, 0)
@@ -222,8 +242,14 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         kid_ssl = self._compute_baseline_kid('simclr')
         self._writer.add_scalar('baseline/KID_SSL', kid_ssl, 0)
 
+        kid_ae = self._compute_baseline_kid('ae')
+        self._writer.add_scalar('baseline/KID_AE', kid_ae, 0)
+
         geom_dist = self._baseline_geometric_distance()
         self._writer.add_scalar('baseline/Geometric_dist', geom_dist, 0)
+
+        geom_dist_ae = self._baseline_geometric_distance('ae')
+        self._writer.add_scalar('baseline/AE_Geometric_dist', geom_dist_ae, 0)
         self._writer.close()
 
     def _step_g(self):
@@ -407,7 +433,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             ckpt['fid'] = fid_score
             self._writer.add_scalar('eval/FID', fid_score, epoch)
 
-            ssl_fid = self._compute_ssl_fid()
+            ssl_fid = self._compute_fid('simclr')
             ckpt['ssl_fid'] = ssl_fid
             self._writer.add_scalar('eval/SSL_FID', ssl_fid, epoch)
 
@@ -543,12 +569,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         return res
 
     @torch.no_grad()
-    def _compute_ssl_fid(self) -> float:
-        """Computes FID on SSL features
+    def _compute_fid(self, encoder_type: str = 'simclr') -> float:
+        """Computes FID on custom features
 
         Returns:
             float: FID
         """
+
+        if encoder_type not in ['simclr', 'ae']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
+
         bs = self._config['batch_size']
 
         path = self._config['dataset']['path']
@@ -571,8 +608,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             with torch.no_grad():
                 img_gen = self._g_ema(lbl)
 
-                h, _ = self._encoder(img)
-                h_gen, _ = self._encoder(img_gen)
+                h, _ = encoder(img)
+                h_gen, _ = encoder(img_gen)
 
             activations_real.extend(h.cpu().numpy())
             activations_fake.extend(h_gen.cpu().numpy())
@@ -589,12 +626,25 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         return fletcher_distance
 
     @torch.no_grad()
-    def _compute_chamfer_distance(self) -> float:
+    def _compute_chamfer_distance(self, encoder_type: str = 'simclr') -> float:
         """Computes Chamfer distance between real and generated data
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, ae
 
         Returns:
             float: computed Chamfer distance
         """
+
+        if encoder_type not in ['simclr', 'ae']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
 
         bs = self._config['batch_size']
 
@@ -617,8 +667,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
             with torch.no_grad():
                 img_gen = self._g_ema(lbl)
-                h, _ = self._encoder(img)
-                h_gen, _ = self._encoder(img_gen)
+                h, _ = encoder(img)
+                h_gen, _ = encoder(img_gen)
 
             embeddings_real.extend(h.cpu().numpy())
             embeddings_gen.extend(h_gen.cpu().numpy())
@@ -643,19 +693,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         """Computes perceptual path length (PPL)
 
         Args:
-            encoder_type: type of encoder to use. Choices: simclr, vgg
+            encoder_type: type of encoder to use. Choices: simclr, vgg, ae
 
         Returns:
             float: perceptual path length (smaller better)
         """
 
-        if encoder_type not in ['simclr', 'vgg']:
+        if encoder_type not in ['simclr', 'vgg', 'ae']:
             raise ValueError('Incorrect encoder')
 
         if encoder_type == 'simclr':
             encoder = self._encoder
-        else:
+        elif encoder_type == 'vgg':
             encoder = vgg16().to(self._device).eval()
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
 
         n_samples = 50_000
         eps = 1e-4
@@ -679,7 +733,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             with torch.no_grad():
                 img = self._g_ema(labels_cat, torch.cat([epst0, epst1]), torch.cat([z0, z1]))
 
-                if encoder_type == 'simclr':
+                if encoder_type in ['simclr', 'ae']:
                     h, _ = encoder(img)
                 else:
                     if img.shape[2] != 256 or img.shape[3] != 256:
@@ -701,19 +755,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         """Computes KID score
 
         Args:
-            encoder_type: type of encoder to use. Choices: simclr, inception
+            encoder_type: type of encoder to use. Choices: simclr, inception, ae
 
         Returns:
             float: KID score
         """
 
-        if encoder_type not in ['simclr', 'inception']:
+        if encoder_type not in ['simclr', 'inception', 'ae']:
             raise ValueError('Incorrect encoder')
 
         if encoder_type == 'simclr':
             encoder = self._encoder
-        else:
+        elif encoder_type == 'inception':
             encoder = load_patched_inception_v3().to(self._device).eval()
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
 
         bs = self._config['batch_size']
         path = self._config['dataset']['path']
@@ -769,13 +827,26 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         return float(kid)
 
     @torch.no_grad()
-    def _compute_geometric_distance(self) -> float:
+    def _compute_geometric_distance(self, encoder_type: str = 'simclr') -> float:
         """Computes geometric distance between real and generated samples using
         features computed using SimCLR
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, ae
 
         Returns:
               float: geometric distance
         """
+
+        if encoder_type not in ['simclr', 'ae']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
 
         loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
 
@@ -802,8 +873,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
             with torch.no_grad():
                 img_gen = self._g_ema(lbl)
-                h, _ = self._encoder(img)
-                h_gen, _ = self._encoder(img_gen)
+                h, _ = encoder(img)
+                h_gen, _ = encoder(img_gen)
 
             embeddings_real.extend(h.detach().cpu())
             embeddings_gen.extend(h_gen.detach().cpu())
@@ -897,13 +968,26 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         return result
 
     @torch.no_grad()
-    def _baseline_geometric_distance(self) -> float:
+    def _baseline_geometric_distance(self, encoder_type: str = 'simclr') -> float:
         """Computes baseline geometric distance between features computed using SimCLR
         for two dataset splits
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, ae
 
         Returns:
             float: baseline geometric distance
         """
+
+        if encoder_type not in ['simclr', 'ae']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
 
         loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
 
@@ -927,8 +1011,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             img_test = img_test.to(self._device)
 
             with torch.no_grad():
-                h_val, _ = self._encoder(img_val)
-                h_test, _ = self._encoder(img_test)
+                h_val, _ = encoder(img_val)
+                h_test, _ = encoder(img_test)
 
             embeddings_val.extend(h_val.detach().cpu())
             embeddings_test.extend(h_test.detach().cpu())
@@ -945,6 +1029,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             float: baseline FID score
         """
 
+        bs = self._config['batch_size']
+
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
@@ -955,16 +1041,30 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         num_samples = min(len(ds_val), len(ds_test))
 
-        fid_score = get_fid_between_datasets(ds_test, ds_val, self._device, num_samples)
+        fid_score = get_fid_between_datasets(ds_test, ds_val, self._device, bs, num_samples)
         return fid_score
 
     @torch.no_grad()
-    def _compute_baseline_ssl_fid(self) -> float:
-        """Computes baseline FID on features, computed using SimCLR
+    def _compute_baseline_ssl_fid(self, encoder_type: str = 'simclr') -> float:
+        """Computes baseline FID on features, computed using SimCLR and AE
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, ae
 
         Returns:
             float: baseline SSL FID
         """
+
+        if encoder_type not in ['simclr', 'ae']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
+
         bs = self._config['batch_size']
 
         path = self._config['dataset']['path']
@@ -985,8 +1085,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             img_test = img_test.to(self._device)
 
             with torch.no_grad():
-                h_val, _ = self._encoder(img_val)
-                h_test, _ = self._encoder(img_test)
+                h_val, _ = encoder(img_val)
+                h_test, _ = encoder(img_test)
 
             activations_val.extend(h_val.cpu().numpy())
             activations_test.extend(h_test.cpu().numpy())
@@ -1002,12 +1102,25 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         return fletcher_distance
 
     @torch.no_grad()
-    def _compute_baseline_chamfer_distance(self) -> float:
+    def _compute_baseline_chamfer_distance(self, encoder_type: str = 'simclr') -> float:
         """Computed baseline Chamfer distance
+
+        Args:
+            encoder_type: type of encoder to use. Choices: simclr, ae
 
         Returns:
             float: baseline Chamfer distance
         """
+
+        if encoder_type not in ['simclr', 'ae']:
+            raise ValueError('Incorrect encoder')
+
+        if encoder_type == 'simclr':
+            encoder = self._encoder
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
 
         bs = self._config['batch_size']
         path = self._config['dataset']['path']
@@ -1027,8 +1140,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             img_test = img_test.to(self._device)
 
             with torch.no_grad():
-                h_val, _ = self._encoder(img_val)
-                h_test, _ = self._encoder(img_test)
+                h_val, _ = encoder(img_val)
+                h_test, _ = encoder(img_test)
 
             embeddings_val.extend(h_val.cpu().numpy())
             embeddings_test.extend(h_test.cpu().numpy())
@@ -1053,19 +1166,23 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         """Computes baseline KID
 
         Args:
-            encoder_type: type of encoder to use. Choices: simclr, inception
+            encoder_type: type of encoder to use. Choices: simclr, inception, ae
 
         Returns:
             float: KID score
         """
 
-        if encoder_type not in ['simclr', 'inception']:
+        if encoder_type not in ['simclr', 'inception', 'ae']:
             raise ValueError('Incorrect encoder')
 
         if encoder_type == 'simclr':
             encoder = self._encoder
-        else:
+        elif encoder_type == 'inception':
             encoder = load_patched_inception_v3().to(self._device).eval()
+        else:
+            encoder = Encoder().to(self._device).eval()
+            ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+            encoder.load_state_dict(ckpt_encoder)
 
         bs = self._config['batch_size']
 

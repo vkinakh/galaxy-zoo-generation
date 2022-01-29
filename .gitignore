@@ -7,6 +7,7 @@
 runs/
 results/
 models/GalaxyZoo
+models/cVAE
 
 ### Images ###
 # JPEG

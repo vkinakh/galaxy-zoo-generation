@@ -22,8 +22,8 @@ def load_patched_inception_v3():
 
 
 @torch.no_grad()
-def extract_loader_features(loader, inception, device):
-    n_batches = int(50_000 / 128) + 1
+def extract_loader_features(loader, inception, device, n_samples: int, batch_size: int):
+    n_batches = int(n_samples / batch_size) + 1
     feature_list = []
 
     for i, (img, _) in tqdm(enumerate(loader), desc="extracting ref features for FID: ", leave=False):
@@ -114,14 +114,15 @@ def fid_generator(generator, ref_mean, ref_cov, inception, device, num_samples, 
 def get_fid_between_datasets(dataset_a: Dataset,
                              dataset_b: Dataset,
                              device: str,
+                             batch_size: int,
                              num_samples: int = 50_000) -> float:
     inception = load_patched_inception_v3().eval().to(device)
 
-    loader_a = infinite_loader(DataLoader(dataset_a, batch_size=128, shuffle=True, drop_last=False, num_workers=8))
-    loader_b = infinite_loader(DataLoader(dataset_b, batch_size=128, shuffle=True, drop_last=False, num_workers=8))
+    loader_a = infinite_loader(DataLoader(dataset_a, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=8))
+    loader_b = infinite_loader(DataLoader(dataset_b, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=8))
 
-    feat_a = extract_loader_features(loader_a, inception, device)[:num_samples]
-    feat_b = extract_loader_features(loader_b, inception, device)[:num_samples]
+    feat_a = extract_loader_features(loader_a, inception, device, num_samples, batch_size)[:num_samples]
+    feat_b = extract_loader_features(loader_b, inception, device, num_samples, batch_size)[:num_samples]
 
     mean_a = np.mean(feat_a, 0)
     cov_a = np.cov(feat_a, rowvar=False)
@@ -136,7 +137,7 @@ def get_fid_fn(dataset, device, num_samples=50_000):
 
     loader = DataLoader(dataset, batch_size=128, shuffle=False, drop_last=False, num_workers=8)
 
-    ref_feat = extract_loader_features(loader, inception, device)[:num_samples]
+    ref_feat = extract_loader_features(loader, inception, device, num_samples, batch_size)[:num_samples]
 
     ref_mean = np.mean(ref_feat, 0)
     ref_cov = np.cov(ref_feat, rowvar=False)
