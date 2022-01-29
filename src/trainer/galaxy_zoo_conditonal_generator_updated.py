@@ -28,6 +28,7 @@ from src.data import infinite_loader
 from src.data.dataset_updated import MakeDataLoader
 from src.transform import image_generation_augment
 from src.metrics import evaluate_generator
+from src.metrics.distribution_measures import evaluate_latent_distribution, Encoder
 from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
 
 
@@ -158,42 +159,48 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         - epsilon and z1, ..., zk latent dimensions
         """
 
-        fid_score = self._compute_fid_score()
-        self._writer.add_scalar('eval/FID', fid_score, 0)
+        # fid_score = self._compute_fid_score()
+        # self._writer.add_scalar('eval/FID', fid_score, 0)
 
-        i_score = self._compute_inception_score()
-        self._writer.add_scalar('eval/IS', i_score, 0)
+        # i_score = self._compute_inception_score()
+        # self._writer.add_scalar('eval/IS', i_score, 0)
 
-        chamfer_dist = self._compute_chamfer_distance()
-        self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
+        # chamfer_dist = self._compute_chamfer_distance()
+        # self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
-        ssl_fid = self._compute_ssl_fid()
-        self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
+        # ssl_fid = self._compute_ssl_fid()
+        # self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
-        ssl_ppl = self._compute_ppl('simclr')
-        self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
+        # ssl_ppl = self._compute_ppl('simclr')
+        # self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
 
-        vgg_ppl = self._compute_ppl('vgg')
-        self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
+        # vgg_ppl = self._compute_ppl('vgg')
+        # self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
 
-        kid_inception = self._compute_kid('inception')
-        self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
+        # kid_inception = self._compute_kid('inception')
+        # self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
 
-        kid_ssl = self._compute_kid('simclr')
-        self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
+        # kid_ssl = self._compute_kid('simclr')
+        # self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
 
-        morp_res = self._compute_morphological_features()
-        self._log('eval/morphological', morp_res, 0)
+        # morp_res = self._compute_morphological_features()
+        # self._log('eval/morphological', morp_res, 0)
 
-        geometric_dist = self._compute_geometric_distance()
-        self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
+        # geometric_dist = self._compute_geometric_distance()
+        # self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
 
-        attribute_accuracy = self._attribute_control_accuracy()
-        self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
+        # attribute_accuracy = self._attribute_control_accuracy()
+        # self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
 
-        self._traverse_zk()
-        self._explore_eps()
-        self._explore_eps_zs()
+        res_dist_measures = self._compute_distribution_measures()
+        # self._log('eval/distribution_measures', res_dist_measures, 0)
+
+        from pprint import pprint
+        pprint(res_dist_measures)
+
+        # self._traverse_zk()
+        # self._explore_eps()
+        # self._explore_eps_zs()
 
         self._writer.close()
 
@@ -502,6 +509,38 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         ds = ConcatDataset([ds_val, ds_test])
         dl = infinite_loader(DataLoader(ds, bs, True, num_workers=n_workers))
         return dl
+
+    @torch.no_grad()
+    def _compute_distribution_measures(self) -> Dict[str, float]:
+        """Computes distribution measures: cluster measures, Wasserstein measures
+
+        Returns:
+            Dict[str, float]: distribution measures
+        """
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        n_workers = self._config['n_workers']
+        bs = self._config['batch_size']
+
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_val = make_dl.get_data_loader_valid(batch_size=bs, shuffle=False,
+                                               num_workers=n_workers)
+        dl_test = make_dl.get_data_loader_test(batch_size=bs, shuffle=False,
+                                               num_workers=n_workers)
+        # load encoder
+        encoder = Encoder().to(self._device).eval()
+        ckpt_encoder = torch.load(self._config['eval']['path_encoder'])
+        encoder.load_state_dict(ckpt_encoder)
+
+        n_cluster = self._config['eval']['n_clusters']
+        res_clusters, res_wasserstein = evaluate_latent_distribution(self._g_ema,
+                                                                     dl_test, dl_val, encoder,
+                                                                     N_cluster=n_cluster,
+                                                                     batch_size=bs)
+        res = {**res_clusters, **res_wasserstein, 'n_cluster': n_cluster}
+        return res
 
     @torch.no_grad()
     def _compute_ssl_fid(self) -> float:
