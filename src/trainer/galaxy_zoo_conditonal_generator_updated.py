@@ -164,11 +164,11 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         # i_score = self._compute_inception_score()
         # self._writer.add_scalar('eval/IS', i_score, 0)
 
-        chamfer_dist = self._compute_chamfer_distance()
-        self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
+        # chamfer_dist = self._compute_chamfer_distance()
+        # self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
-        # ssl_fid = self._compute_ssl_fid()
-        # self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
+        ssl_fid = self._compute_ssl_fid()
+        self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
         # ssl_ppl = self._compute_ppl('simclr')
         # self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
@@ -510,17 +510,22 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         Returns:
             float: FID
         """
-        n_samples = 50_000
         bs = self._config['batch_size']
-        n_batches = int(n_samples / bs) + 1
-        dl = self._get_eval_dl()
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
+        dl_valid = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
 
         # compute activations
         activations_real = []
         activations_fake = []
 
-        for _ in trange(n_batches):
-            img, lbl = next(dl)
+        for batch_val, batch_test in zip(dl_valid, dl_test):
+            img, _ = batch_test
+            _, lbl = batch_val
             img = img.to(self._device)
             lbl = lbl.to(self._device)
 
