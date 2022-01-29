@@ -869,20 +869,12 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8, backend="tensorized")
 
         bs = self._config['batch_size']
-        # n_samples = 20_000
-        # n_batches = int(n_samples / bs) + 1
-
         # load dataset
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
         make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
-        # ds_val = make_dl.dataset_valid
-        # ds_test = make_dl.dataset_test
-        # dl_val = infinite_loader(DataLoader(ds_val, bs, shuffle=True, drop_last=True))
-        # dl_test = infinite_loader(DataLoader(ds_test, bs, shuffle=True, drop_last=True))
-
         dl_val = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
 
