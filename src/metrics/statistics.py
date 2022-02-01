@@ -2,6 +2,7 @@
 # of morphological properties of sets of galaxy images
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 from tqdm import tqdm
 
 import torch
@@ -17,7 +18,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def plot_corner(*data, **kwargs):
     d = np.array(*data).T
     print(d.shape)
-    corner(d, **kwargs)
+    fig = corner(d, **kwargs)
+    return fig
 
 
 def plot_corner_measures_group(group: str, measures: Measures, **kwargs):
@@ -34,7 +36,8 @@ def plot_corner_measures_group(group: str, measures: Measures, **kwargs):
     """
     data = measures.group(group)
     labels = data.keys
-    plot_corner(data.numpy(), labels=labels, **kwargs)
+    fid = plot_corner(data.numpy(), labels=labels, **kwargs)
+    return fid
 
 
 def compute_distance_point_clouds_chamfer(
@@ -132,9 +135,23 @@ def evaluate_generator(dataloader, generator, latent_dim=128, plot=False, plot_p
     for group in tqdm(measures_groups.keys()):
         distances[group] = compute_distance_measures_group(group, source, target)
         if plot:
-            plot_corner_measures_group(group, source)
-            plt.savefig(plot_path / f"measures_source_{group}.png")
-            plot_corner_measures_group(group, target)
-            plt.savefig(plot_path / f"measures_target_{group}.png")
+
+            if group == "ellipticity":  # ellipticity is a single measure, corner plot is useless
+                continue
+
+            fig = None
+            name = 'InfoSCC-GAN'
+            fig = plot_corner_measures_group(group, source, color="b", fig=fig, label_kwargs={"fontsize":16})
+            fig = plot_corner_measures_group(group, target, fig=fig, color="r")
+            fig.suptitle(name, fontsize=20)
+            blue_line = mlines.Line2D([], [], color='blue', label='source')
+            red_line = mlines.Line2D([], [], color='red', label='target')
+            plt.legend(handles=[blue_line, red_line], bbox_to_anchor=(0., 1.0, 1., .0), loc=4, fontsize=16)
+            plt.savefig(plot_path / f"measures_combined_{group}.png")
+            # plot_corner_measures_group(group, source)
+            # plt.savefig(plot_path / f"measures_source_{group}.png")
+            # plot_corner_measures_group(group, target)
+            # plt.savefig(plot_path / f"measures_target_{group}.png")
+            # plt.savefig(plot_path / f"measures_combined_{group}.png")
     distances["total"] = compute_distance_point_clouds(source.torch(), target.torch())
     return distances
