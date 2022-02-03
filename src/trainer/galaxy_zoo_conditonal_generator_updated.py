@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
 from torchvision import utils
 from chamferdist import ChamferDistance
 from geomloss import SamplesLoss
@@ -22,12 +21,12 @@ from .generator_trainer import GeneratorTrainer, calculate_frechet_distance
 from src.models import ConditionalGenerator
 from src.models import ResNetSimCLR, GalaxyZooClassifier
 from src.models import GlobalDiscriminator, NLayerDiscriminator
+from src.models import ImageClassifier
 from src.models.fid import load_patched_inception_v3, get_fid_between_datasets
 from src.models.vgg16 import vgg16
 from src.loss import get_adversarial_losses, get_regularizer
 from src.data.dataset_updated import MakeDataLoader
 from src.transform import image_generation_augment
-from src.metrics import evaluate_generator
 from src.metrics.statistics import get_measures_dataloader, get_measures_generator, evaluate_measures
 from src.metrics.distribution_measures import evaluate_latent_distribution, Encoder
 from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
@@ -208,6 +207,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         attribute_accuracy = self._attribute_control_accuracy()
         self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
+        pprint(attribute_accuracy)
 
         res_dist_measures = self._compute_distribution_measures()
         print('distribution measures:')
@@ -909,6 +909,14 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
             Dict: attribute control accuracy for each label
         """
 
+        # load classifier
+        cls = ImageClassifier().to(self._device).eval()
+        cls.use_label_hierarchy()
+
+        path_cls = self._config['eval']['path_classifier']
+        ckpt = torch.load(path_cls)
+        cls.load_state_dict(ckpt)
+
         n_samples = 50_000
         bs = self._config['batch_size']
         n_batches = int(n_samples / bs) + 1
@@ -923,8 +931,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
             with torch.no_grad():
                 img = self._g_ema(label)
-                h, _ = self._encoder(img)
-                pred = self._classifier(h)
+                img = (img * 0.5) + 0.5
+                pred = cls(img)
 
             diff = (label - pred) ** 2
             diffs.extend(diff.detach().cpu().numpy())

@@ -8,6 +8,7 @@ runs/
 results/
 models/GalaxyZoo
 models/cVAE
+models/classifier
 
 ### Images ###
 # JPEG

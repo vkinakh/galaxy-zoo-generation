@@ -83,5 +83,6 @@ python compute_baseline.py --config <path to config>
 |Model type|Download link|
 |----------|-------------|
 |Encoder   |[Download](https://drive.google.com/file/d/1lOXiTBcbI3AnoNiFmrk_1keQVKqbAwjB/view?usp=sharing)|
-|Classifier|[Download](https://drive.google.com/file/d/1B9SMUFFldvDEgHrUQVmFTPSxuiRZ3sfk/view?usp=sharing)|
+|Classifier (for trained of the generator)|[Download](https://drive.google.com/file/d/1B9SMUFFldvDEgHrUQVmFTPSxuiRZ3sfk/view?usp=sharing)|
 |Autoencoder|[Download](https://drive.google.com/file/d/1WTj-x3LjbIufdypnr4GQD1bzYyyPPAY4/view?usp=sharing)|
+|Classifier (for evaluation)|[Download](https://drive.google.com/file/d/1Ogjajeo5KH5mhaHseNsNVMfHfI3GG7Kd/view?usp=sharing)|

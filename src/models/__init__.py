@@ -6,3 +6,5 @@ from .global_discriminator import GlobalDiscriminator
 from .nlayer_discriminator import NLayerDiscriminator
 from .vgg16 import vgg16
 from .inception import inception
+
+from .image_classifier import ImageClassifier
