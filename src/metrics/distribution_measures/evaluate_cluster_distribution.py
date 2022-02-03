@@ -1,9 +1,8 @@
-
 import numpy as np
 from sklearn.cluster import KMeans
 
 
-class DistributionEvaluation():
+class DistributionEvaluation:
     """ Class for comparison of distributions using k-means.
     N_clusters cluster centers are fitted to the data_reference.
     For data_reference and other added datasets, the number of points in each cluster are computed and saved to
@@ -60,10 +59,16 @@ class DistributionEvaluation():
         return errors
 
     def get_distances(self, squared: bool = True):
-        """ get average (squared) distance to cluster centers for all distributions. """
+        """ get average (squared) distance to cluster centers in every cluster for all distributions. """
         distances = {key: compute_distances(clusters, self.distance_transforms[key], self.N_clusters, squared=squared)
                      for key, clusters in self.predictions.items()
                      if not key == "reference"}
+        return distances
+
+    def get_mean_distance(self, squared: bool = True):
+        """ get average (squared) distance to cluster centers over all clusters for all distributions. """
+        distances = self.get_distances(squared=squared)
+        distances = {key: np.nanmean(value) for key, value in distances.items()} # this requires nanmean, for clusters may be empty -> NaN distance
         return distances
 
 
@@ -78,12 +83,12 @@ def compute_distances(clusters: np.array, distances: np.array, N_clusters: int, 
     N_clusters : int
         number of clusters
     squared : bool, default=True
-        if True, square distances
+        if True, compute RMS
     """
     distances = distances.min(1)  # distance to nearest cluster center
     if squared:
         distances = distances * distances
-    average_distances = [np.mean(distances[clusters == cluster]) for cluster in range(N_clusters)]
+    average_distances = [np.mean(distances[clusters == cluster])**(1-0.5*squared) for cluster in range(N_clusters)]
     return average_distances
 
 
@@ -95,5 +100,5 @@ def compute_l1_distance(reference, values, div=1):
 
 def compute_l2_distance(reference, values, div=1):
     """ Estimate L2 distance between values and reference. """
-    result = np.sum([(v - r)**2 / r ** 2 for r, v in zip(reference, values)])
+    result = np.sum([(v - r)**2 / r**2 for r, v in zip(reference, values)])
     return result / div

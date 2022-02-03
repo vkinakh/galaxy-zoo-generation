@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 from torchvision import utils
 from chamferdist import ChamferDistance
 from geomloss import SamplesLoss
@@ -25,10 +25,10 @@ from src.models import GlobalDiscriminator, NLayerDiscriminator
 from src.models.fid import load_patched_inception_v3, get_fid_between_datasets
 from src.models.vgg16 import vgg16
 from src.loss import get_adversarial_losses, get_regularizer
-from src.data import infinite_loader
 from src.data.dataset_updated import MakeDataLoader
 from src.transform import image_generation_augment
 from src.metrics import evaluate_generator
+from src.metrics.statistics import get_measures_dataloader, get_measures_generator, evaluate_measures
 from src.metrics.distribution_measures import evaluate_latent_distribution, Encoder
 from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
 
@@ -198,6 +198,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         morp_res = self._compute_morphological_features()
         self._log('eval/morphological', morp_res, 0)
+        pprint(morp_res)
 
         geometric_dist = self._compute_geometric_distance('simclr')
         self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
@@ -514,27 +515,6 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         labels = make_galaxy_labels_hierarchical(labels)
         labels = labels.to(self._device)
         return labels
-
-    def _get_eval_dl(self) -> DataLoader:
-        """Loads dataloader for evaluation
-
-        Returns:
-            DataLoader: evaluation dataloader
-        """
-
-        bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=True)
-        ds_val = make_dl.dataset_valid
-        ds_test = make_dl.dataset_test
-        ds = ConcatDataset([ds_val, ds_test])
-        dl = infinite_loader(DataLoader(ds, bs, True, num_workers=n_workers))
-        return dl
 
     @torch.no_grad()
     def _compute_distribution_measures(self) -> Dict[str, float]:
@@ -889,31 +869,34 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
     @torch.no_grad()
     def _compute_morphological_features(self) -> Dict[str, float]:
-        """Computes morphological features for the generator"""
+        clean_morphology = {
+            "deviation": (0, 999999),
+            "asymmetry": (-1, 1),
+            "smoothness": (-0.5, 1)
+        }
 
         self._g_ema.eval()
         bs = self._config['batch_size']
-        n_workers = self._config['n_workers']
-
-        path = self._config['dataset']['path']
-        anno = self._config['dataset']['anno']
-        size = self._config['dataset']['size']
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
-        ds_val = make_dl.dataset_valid
-        dl_val = DataLoader(ds_val, bs, True, num_workers=n_workers)
-
-        z_size = self._config['generator']['z_size']
 
         comment = self._config['comment']
         plot_path = Path(f'./images/{comment}/')
         plot_path.mkdir(parents=True, exist_ok=True)
 
-        with torch.no_grad():
-            eval_results = evaluate_generator(dl_val, self._g_ema,
-                                              latent_dim=z_size,
-                                              plot=True,
-                                              plot_path=plot_path)
-        return eval_results
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_test = make_dl.get_data_loader_test(bs)
+        dl_val = make_dl.get_data_loader_valid(bs)
+
+        target_measures = get_measures_dataloader(dl_test)
+        target_measures.clean_measures(clean_morphology)
+        generated_measures = get_measures_generator(self._g_ema, dl_val)
+        generated_measures.clean_measures(clean_morphology)
+        distances = evaluate_measures(target_measures, generated_measures, plot=True,
+                                      name='InfoSCC-GAN',
+                                      plot_path=plot_path)
+        return distances
 
     @torch.no_grad()
     def _attribute_control_accuracy(self, build_hist: bool = True) -> Dict:

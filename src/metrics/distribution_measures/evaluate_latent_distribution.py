@@ -7,6 +7,7 @@ from functools import partial
 from tqdm import tqdm
 import numpy as np
 
+import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
@@ -56,6 +57,7 @@ def evaluate_latent_distribution(generator: nn.Module,
     return results_clusters, results_wasserstein
 
 
+@torch.no_grad()
 def get_latent(dataloader,  # iterable generator that provides a tuple (images, dummy).
                encoder: autoencoder.Encoder,
                rescale: bool = True,  # if True: rescale image from (0,-1) to (-1,1)
@@ -71,6 +73,7 @@ def get_latent(dataloader,  # iterable generator that provides a tuple (images, 
     return np.array(latent)
 
 
+@torch.no_grad()
 def image_generator(model,  # pytorch generator model that takes latent vector and label vector as input
                     dataloader: DataLoader,  # dataloader to provide labels for the predicted distribution
                     batch_size: int

@@ -8,8 +8,8 @@ loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsga
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: <>          # path to directory with images
-  anno: <>          # path to file with attribute annotations
+  path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/ # path to folder with images
+  anno: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
   n_channels: 3     # number of channels in image
@@ -34,5 +34,8 @@ discriminator:    # discriminator parameters
   actnorm: False
   ndf: 64
   n_layers: 4
+
+eval:
+  path_encoder: ./models/cVAE/parameter_state_dict_Encoder.pth
 
 comment: galaxy_zoo_generation_baseline
