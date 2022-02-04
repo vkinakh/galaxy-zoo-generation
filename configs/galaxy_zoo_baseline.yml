@@ -8,13 +8,13 @@ loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsga
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/images_training_rev1/ # path to folder with images
-  anno: /home/kinakh/Datasets/galaxy-zoo-the-galaxy-challenge/training_solutions_rev1.csv # path to file with attribute annotations
+  path: <>          # path to folder `images_training_rev1` with images
+  anno: <>          # path to file `training_solutions_rev1.csv` with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
   n_channels: 3     # number of channels in image
 
-encoder:                                   # encoder parameters
+encoder:                                   # SimCLR encoder parameters
   path: ./models/GalaxyZoo/galaxy_zoo.pth  # path to pretrained encoder model
   base_model: resnet50                     # encoder base model
   out_dim: 128                             # z-projection size
@@ -35,7 +35,8 @@ discriminator:    # discriminator parameters
   ndf: 64
   n_layers: 4
 
-eval:
-  path_encoder: ./models/cVAE/parameter_state_dict_Encoder.pth
+eval:   # evaluation parameters
+  path_encoder: ./models/cVAE/parameter_state_dict_Encoder.pth   # path to autoencoder, used for evaluation
+  path_classifier: ./models/classifier/parameter_state_dict_ImageClassifier.pth  # path to classifier for evaluation
 
 comment: galaxy_zoo_generation_baseline

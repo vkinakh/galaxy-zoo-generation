@@ -709,7 +709,7 @@ class GeneratorTrainer(BaseTrainer):
         size = self._config['dataset']['size']
         make_dl = MakeDataLoader(path, anno, size, augmented=False)
 
-        n_samples = 50_000
+        n_samples = len(make_dl.dataset_test)
         bs = self._config['batch_size']
         dataset = GANDataset(self._g_ema, n=n_samples)
 

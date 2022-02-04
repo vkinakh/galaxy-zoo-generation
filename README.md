@@ -79,10 +79,19 @@ To compute baseline metrics values, first fill the **config file**. The example 
 python compute_baseline.py --config <path to config>
 ```
 
+## Simulate mode-collapsed model and evaluate it
+
+To simulate mode-collapsed model (model that returns the same sample all the time) and evaluate it, fill the **config 
+file**. The example is in `configs/single_image_eval.yml`. Then run
+
+```bash
+python evaluate_single_image_generator.py --config <path to config>
+```
+
 ## Pretrained models
 |Model type|Download link|
 |----------|-------------|
 |Encoder   |[Download](https://drive.google.com/file/d/1lOXiTBcbI3AnoNiFmrk_1keQVKqbAwjB/view?usp=sharing)|
-|Classifier (for trained of the generator)|[Download](https://drive.google.com/file/d/1B9SMUFFldvDEgHrUQVmFTPSxuiRZ3sfk/view?usp=sharing)|
+|Classifier (for training of the generator)|[Download](https://drive.google.com/file/d/1B9SMUFFldvDEgHrUQVmFTPSxuiRZ3sfk/view?usp=sharing)|
 |Autoencoder|[Download](https://drive.google.com/file/d/1WTj-x3LjbIufdypnr4GQD1bzYyyPPAY4/view?usp=sharing)|
 |Classifier (for evaluation)|[Download](https://drive.google.com/file/d/1Ogjajeo5KH5mhaHseNsNVMfHfI3GG7Kd/view?usp=sharing)|

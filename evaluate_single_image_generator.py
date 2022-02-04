@@ -1,3 +1,5 @@
+import argparse
+
 from src.evaluation import SingleImageEvaluator
 
 
@@ -7,4 +9,9 @@ def run(config_path: str):
 
 
 if __name__ == '__main__':
-    run('./configs/single_image_eval.yml')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', '-c',
+                        type=str)
+    args = parser.parse_args()
+    run(args.config)
+

@@ -24,7 +24,9 @@ from src.models import GlobalDiscriminator, NLayerDiscriminator
 from src.models import ImageClassifier
 from src.models.fid import load_patched_inception_v3, get_fid_between_datasets
 from src.models.vgg16 import vgg16
+from src.models import inception_score
 from src.loss import get_adversarial_losses, get_regularizer
+from src.data import GenDataset
 from src.data.dataset_updated import MakeDataLoader
 from src.transform import image_generation_augment
 from src.metrics.statistics import get_measures_dataloader, get_measures_generator, evaluate_measures
@@ -220,6 +222,9 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         fid_ae = self._compute_baseline_ssl_fid('ae')
         self._writer.add_scalar('baseline/AE_FID', fid_ae, 0)
 
+        i_score = self._compute_baseline_inception_score()
+        self._writer.add_scalar('baseline/IS', i_score, 0)
+
         chamfer_dist = self._compute_baseline_chamfer_distance('simclr')
         self._writer.add_scalar('baseline/Chamfer', chamfer_dist, 0)
 
@@ -244,7 +249,6 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         attribute_accuracy = self._baseline_attribute_control_accuracy()
         self._log('baseline/attribute_control_accuracy', attribute_accuracy, 0)
         pprint(attribute_accuracy)
-
         self._writer.close()
 
     def _step_g(self):
@@ -509,6 +513,25 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         labels = make_galaxy_labels_hierarchical(labels)
         labels = labels.to(self._device)
         return labels
+
+    @torch.no_grad()
+    def _compute_baseline_inception_score(self) -> float:
+        """Computes baseline inception score for the dataset
+
+        Returns:
+            float: inception score
+        """
+
+        bs = self._config['batch_size']
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
+        ds = GenDataset(make_dl.dataset_valid)
+
+        with torch.no_grad():
+            score = inception_score(ds, batch_size=bs, resize=True)[0]
+        return score
 
     @torch.no_grad()
     def _compute_distribution_measures(self) -> Dict[str, float]:
