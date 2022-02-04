@@ -5,13 +5,12 @@ import random
 
 from tqdm import trange
 import numpy as np
-from scipy import linalg
 
 from sklearn.manifold import TSNE
 
 import torch
 from torchvision import transforms, utils
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 from chamferdist import ChamferDistance
 from geomloss import SamplesLoss
 

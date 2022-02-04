@@ -30,21 +30,10 @@ from src.transform import image_generation_augment
 from src.metrics.statistics import get_measures_dataloader, get_measures_generator, evaluate_measures
 from src.metrics.distribution_measures import evaluate_latent_distribution, Encoder
 from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
+from src.utils.metrics import slerp
 
 
 torch.backends.cudnn.benchmark = True
-
-
-def slerp(a, b, t):
-    a = a / a.norm(dim=-1, keepdim=True)
-    b = b / b.norm(dim=-1, keepdim=True)
-    d = (a * b).sum(dim=-1, keepdim=True)
-    p = t * torch.acos(d)
-    c = b - d * a
-    c = c / c.norm(dim=-1, keepdim=True)
-    d = a * torch.cos(p) + c * torch.sin(p)
-    d = d / d.norm(dim=-1, keepdim=True)
-    return d
 
 
 class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
