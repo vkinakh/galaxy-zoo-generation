@@ -906,26 +906,30 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         ckpt = torch.load(path_cls)
         cls.load_state_dict(ckpt)
 
-        n_samples = 50_000
         bs = self._config['batch_size']
-        n_batches = int(n_samples / bs) + 1
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_val = make_dl.get_data_loader_valid(bs)
 
         n_out = self._config['dataset']['n_out']
         diffs = []
         labels = []
 
-        for _ in trange(n_batches):
-            label = self._sample_label(bs)
-            label = label.to(self._device)
+        for batch in tqdm(dl_val):
+            _, lbl = batch
+            lbl = lbl.to(self._device)
 
             with torch.no_grad():
-                img = self._g_ema(label)
+                img = self._g_ema(lbl)
                 img = (img * 0.5) + 0.5
                 pred = cls(img)
 
-            diff = (label - pred) ** 2
+            diff = (lbl - pred) ** 2
             diffs.extend(diff.detach().cpu().numpy())
-            labels.extend(label.detach().cpu().numpy())
+            labels.extend(lbl.detach().cpu().numpy())
 
         diffs = np.array(diffs)
         labels = np.array(labels)
