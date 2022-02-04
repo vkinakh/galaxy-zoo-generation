@@ -240,6 +240,11 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
 
         geom_dist_ae = self._baseline_geometric_distance('ae')
         self._writer.add_scalar('baseline/AE_Geometric_dist', geom_dist_ae, 0)
+
+        attribute_accuracy = self._baseline_attribute_control_accuracy()
+        self._log('baseline/attribute_control_accuracy', attribute_accuracy, 0)
+        pprint(attribute_accuracy)
+
         self._writer.close()
 
     def _step_g(self):
@@ -888,14 +893,81 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         return distances
 
     @torch.no_grad()
-    def _attribute_control_accuracy(self, build_hist: bool = True) -> Dict:
+    def _baseline_attribute_control_accuracy(self, build_hist: bool = True) -> Dict[str, float]:
+        """Compute baseline attribute control accuracy
+
+        Args:
+            build_hist: if True, the histogram of differences for each label will be built and saved
+
+        Returns:
+            Dict[str, float]: attribute control accuracy for each label
+        """
+
+        # load classifier
+        cls = ImageClassifier().to(self._device).eval()
+        cls.use_label_hierarchy()
+
+        path_cls = self._config['eval']['path_classifier']
+        ckpt = torch.load(path_cls)
+        cls.load_state_dict(ckpt)
+
+        bs = self._config['batch_size']
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        dl_val = make_dl.get_data_loader_valid(bs)
+
+        n_out = self._config['dataset']['n_out']
+        diffs = []
+        labels = []
+
+        for batch in tqdm(dl_val):
+            img, lbl = batch
+            img = img.to(self._device)
+            img = (img * 0.5) + 0.5
+            lbl = lbl.to(self._device)
+
+            with torch.no_grad():
+                pred = cls(img)
+
+            diff = (lbl - pred) ** 2
+            diffs.extend(diff.detach().cpu().numpy())
+            labels.extend(lbl.detach().cpu().numpy())
+
+        diffs = np.array(diffs)
+        labels = np.array(labels)
+
+        if build_hist:
+            save_dir = self._writer.checkpoint_folder.parent / 'attribute_control_accuracy'
+            save_dir.mkdir(parents=True, exist_ok=True)
+
+            for i in range(n_out):
+                column = self._columns[i]
+                plt.figure()
+                plt.title(f'{column}. Attribute control accuracy')
+                plt.hist(diffs[:, i], bins=100)
+                plt.savefig(save_dir / f'{column}.png', dpi=300)
+
+        mean_diffs = np.mean(diffs, axis=0)
+
+        result = {}
+        for i in range(n_out):
+            result[self._columns[i]] = mean_diffs[i]
+
+        result['aggregated_attribute_accuracy'] = np.sum(diffs) / np.sum(labels)
+        return result
+
+    @torch.no_grad()
+    def _attribute_control_accuracy(self, build_hist: bool = True) -> Dict[str, float]:
         """Computes attribute control accuracy
 
         Args:
             build_hist: if True, the histogram of differences for each label will be built and saved
 
         Returns:
-            Dict: attribute control accuracy for each label
+            Dict[str, float]: attribute control accuracy for each label
         """
 
         # load classifier
