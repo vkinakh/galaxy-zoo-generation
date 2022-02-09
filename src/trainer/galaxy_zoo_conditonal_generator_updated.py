@@ -34,6 +34,8 @@ from src.metrics.distribution_measures import evaluate_latent_distribution, Enco
 from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
 from src.utils.metrics import slerp
 
+from src.loss import DistanceCorrelation
+
 
 torch.backends.cudnn.benchmark = True
 
@@ -150,63 +152,66 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         - epsilon and z1, ..., zk latent dimensions
         """
 
-        fid_score = self._compute_fid_score()
-        self._writer.add_scalar('eval/FID', fid_score, 0)
+        # fid_score = self._compute_fid_score()
+        # self._writer.add_scalar('eval/FID', fid_score, 0)
 
-        i_score = self._compute_inception_score()
-        self._writer.add_scalar('eval/IS', i_score, 0)
+        # i_score = self._compute_inception_score()
+        # self._writer.add_scalar('eval/IS', i_score, 0)
 
-        chamfer_dist = self._compute_chamfer_distance('simclr')
-        self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
+        # chamfer_dist = self._compute_chamfer_distance('simclr')
+        # self._writer.add_scalar('eval/Chamfer', float(chamfer_dist), 0)
 
-        chamfer_ae = self._compute_chamfer_distance('ae')
-        self._writer.add_scalar('eval/Chamfer_AE', float(chamfer_ae), 0)
+        # chamfer_ae = self._compute_chamfer_distance('ae')
+        # self._writer.add_scalar('eval/Chamfer_AE', float(chamfer_ae), 0)
 
-        ssl_fid = self._compute_fid('simclr')
-        self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
+        # ssl_fid = self._compute_fid('simclr')
+        # self._writer.add_scalar('eval/SSL_FID', ssl_fid, 0)
 
-        ae_fid = self._compute_fid('ae')
-        self._writer.add_scalar('eval/AE_FID', ae_fid, 0)
+        # ae_fid = self._compute_fid('ae')
+        # self._writer.add_scalar('eval/AE_FID', ae_fid, 0)
 
-        ssl_ppl = self._compute_ppl('simclr')
-        self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
+        # ssl_ppl = self._compute_ppl('simclr')
+        # self._writer.add_scalar('eval/SSL_PPL', ssl_ppl, 0)
 
-        vgg_ppl = self._compute_ppl('vgg')
-        self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
+        # vgg_ppl = self._compute_ppl('vgg')
+        # self._writer.add_scalar('eval/VGG_PPL', vgg_ppl, 0)
 
-        ae_ppl = self._compute_ppl('ae')
-        self._writer.add_scalar('eval/AE_PPL', ae_ppl, 0)
+        # ae_ppl = self._compute_ppl('ae')
+        # self._writer.add_scalar('eval/AE_PPL', ae_ppl, 0)
 
-        kid_inception = self._compute_kid('inception')
-        self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
+        # kid_inception = self._compute_kid('inception')
+        # self._writer.add_scalar('eval/KID_Inception', kid_inception, 0)
 
-        kid_ssl = self._compute_kid('simclr')
-        self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
+        # kid_ssl = self._compute_kid('simclr')
+        # self._writer.add_scalar('eval/KID_SSL', kid_ssl, 0)
 
-        kid_ae = self._compute_kid('ae')
-        self._writer.add_scalar('eval/KID_AE', kid_ae, 0)
+        # kid_ae = self._compute_kid('ae')
+        # self._writer.add_scalar('eval/KID_AE', kid_ae, 0)
 
-        morp_res = self._compute_morphological_features()
-        self._log('eval/morphological', morp_res, 0)
-        pprint(morp_res)
+        # morp_res = self._compute_morphological_features()
+        # self._log('eval/morphological', morp_res, 0)
+        # pprint(morp_res)
 
-        geometric_dist = self._compute_geometric_distance('simclr')
-        self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
+        # geometric_dist = self._compute_geometric_distance('simclr')
+        # self._writer.add_scalar('eval/Geometric_dist', geometric_dist, 0)
 
-        geometric_dist_ae = self._compute_geometric_distance('ae')
-        self._writer.add_scalar('eval/AE_Geometric_dist', geometric_dist_ae, 0)
+        # geometric_dist_ae = self._compute_geometric_distance('ae')
+        # self._writer.add_scalar('eval/AE_Geometric_dist', geometric_dist_ae, 0)
 
-        attribute_accuracy = self._attribute_control_accuracy()
-        self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
-        pprint(attribute_accuracy)
+        # attribute_accuracy = self._attribute_control_accuracy()
+        # self._log('eval/attribute_control_accuracy', attribute_accuracy, 0)
+        # pprint(attribute_accuracy)
 
-        res_dist_measures = self._compute_distribution_measures()
-        print('distribution measures:')
-        pprint(res_dist_measures)
+        # res_dist_measures = self._compute_distribution_measures()
+        # print('distribution measures:')
+        # pprint(res_dist_measures)
 
-        self._traverse_zk()
-        self._explore_eps()
-        self._explore_eps_zs()
+        # self._traverse_zk()
+        # self._explore_eps()
+        # self._explore_eps_zs()
+
+        dist_corr = self._compute_dist_corr()
+        print(dist_corr)
 
         self._writer.close()
 
@@ -532,6 +537,52 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         with torch.no_grad():
             score = inception_score(ds, batch_size=bs, resize=True)[0]
         return score
+
+    # ================================================================================================================
+    @torch.no_grad()
+    def _compute_dist_corr(self) -> float:
+        """Compute distribution correlation between real and generated samples
+
+        Returns:
+            float: distance correlation between real and generated samples
+        """
+
+        encoder = self._encoder
+
+        bs = self._config['batch_size']
+
+        path = self._config['dataset']['path']
+        anno = self._config['dataset']['anno']
+        size = self._config['dataset']['size']
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
+        dl_valid = make_dl.get_data_loader_valid(bs)
+        dl_test = make_dl.get_data_loader_test(bs)
+
+        # compute activations
+        activations_real = []
+        activations_fake = []
+
+        for batch_val, batch_test in zip(dl_valid, dl_test):
+            img, lbl = batch_test
+            # _, lbl = batch_val
+            img = img.to(self._device)
+            lbl = lbl.to(self._device)
+
+            with torch.no_grad():
+                img_gen = self._g_ema(lbl)
+
+                h, _ = encoder(img)
+                h_gen, _ = encoder(img_gen)
+
+                activations_real.extend(h)
+                activations_fake.extend(h_gen)
+
+        activations_real = torch.stack(activations_real)
+        activations_fake = torch.stack(activations_fake)
+
+        d_corr = DistanceCorrelation()
+        return d_corr(activations_real, activations_fake).cpu().numpy().item()
+    # ================================================================================================================
 
     @torch.no_grad()
     def _compute_distribution_measures(self) -> Dict[str, float]:
