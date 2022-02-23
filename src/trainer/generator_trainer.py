@@ -687,7 +687,7 @@ class GeneratorTrainer(BaseTrainer):
         anno = self._config['dataset']['anno']
         size = 299
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         ds = make_dl.dataset_test
 
         n_samples = len(ds)
