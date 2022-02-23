@@ -35,6 +35,10 @@ from src.utils import PathOrStr, accumulate, make_galaxy_labels_hierarchical
 from src.utils.metrics import slerp
 
 
+random.seed(0)
+np.random.seed(0)
+torch.manual_seed(0)
+torch.cuda.manual_seed(0)
 torch.backends.cudnn.benchmark = True
 
 
@@ -318,7 +322,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1)
+        make_dl = MakeDataLoader(path, anno, size)
         train_dl = make_dl.get_data_loader_train(batch_size=batch_size, shuffle=True,
                                                  num_workers=n_workers)
         val_dl = make_dl.get_data_loader_valid(batch_size=batch_size, shuffle=False,
@@ -547,7 +551,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         n_workers = self._config['n_workers']
         bs = self._config['batch_size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(batch_size=bs, shuffle=False,
                                                num_workers=n_workers)
         dl_test = make_dl.get_data_loader_test(batch_size=bs, shuffle=False,
@@ -562,7 +566,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
                                                                      dl_test, dl_val, encoder,
                                                                      N_cluster=n_cluster,
                                                                      batch_size=bs)
-        res = {**res_clusters, **res_wasserstein, 'n_cluster': n_cluster}
+        res = {**{"cluster": res_clusters}, **{"wasserstein": res_wasserstein}, 'n_cluster': n_cluster}
         return res
 
     @torch.no_grad()
@@ -652,7 +656,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_valid = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
         embeddings_real = []
@@ -778,7 +782,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_valid = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
 
@@ -857,7 +861,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_valid = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
 
@@ -902,7 +906,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_test = make_dl.get_data_loader_test(bs)
         dl_val = make_dl.get_data_loader_valid(bs)
 
@@ -939,7 +943,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(bs)
 
         n_out = self._config['dataset']['n_out']
@@ -1006,7 +1010,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(bs)
 
         n_out = self._config['dataset']['n_out']
@@ -1079,7 +1083,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
 
@@ -1117,7 +1121,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         ds_val = make_dl.dataset_valid
         ds_test = make_dl.dataset_test
 
@@ -1153,7 +1157,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
 
@@ -1209,7 +1213,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
 
@@ -1272,7 +1276,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(bs)
         dl_test = make_dl.get_data_loader_test(bs)
 
