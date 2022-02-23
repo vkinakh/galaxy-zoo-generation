@@ -34,16 +34,18 @@ def evaluate_latent_distribution(generator: nn.Module,
     N_cluster : int
         number of clusters considered in K-means
     """
-    data_reference = get_latent(data_loader_test, encoder)
-    data_validation = get_latent(data_loader_valid, encoder)  # validation set is used to obtain ground truth.
+    data_reference = get_latent(data_loader_test, encoder, rescale=False)
+    data_validation = get_latent(data_loader_valid, encoder, rescale=False)  # validation set is used to obtain ground truth.
     distribution_evaluation = evaluate_cluster_distribution.DistributionEvaluation(data_reference, N_cluster)
     distribution_evaluation.add("ground truth", data_validation)
     results_wasserstein = {}
     wasser = partial(wasserstein.wasserstein, blur=0.005, scaling=0.95, splits=4)
     results_wasserstein["ground truth"] = wasser(data_validation, data_reference)
 
-    data_generated = get_latent(image_generator(generator, data_loader_valid, batch_size=batch_size), encoder)
-    generator = 0  # free memory
+    data_generated = get_latent(image_generator(generator, data_loader_valid, batch_size=batch_size),
+                                encoder,
+                                rescale=False)
+    del generator
 
     name = 'InfoSCC-GAN'
     distribution_evaluation.add(name, data_generated)
@@ -52,7 +54,7 @@ def evaluate_latent_distribution(generator: nn.Module,
     results_clusters = {
         "histograms": distribution_evaluation.histograms,
         "errors": distribution_evaluation.get_errors(),
-        "distances": distribution_evaluation.get_distances(),
+        "distances": distribution_evaluation.get_mean_distance(),
     }
     return results_clusters, results_wasserstein
 
