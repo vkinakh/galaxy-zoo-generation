@@ -234,7 +234,7 @@ class SingleImageEvaluator(BaseEvaluator):
         anno = self._config['dataset']['anno']
         size = 299
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         ds = make_dl.dataset_test
 
         n_samples = len(ds)
@@ -288,7 +288,7 @@ class SingleImageEvaluator(BaseEvaluator):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_test = make_dl.get_data_loader_test(bs)
         embeddings_real = []
         embeddings_gen = []
@@ -348,7 +348,7 @@ class SingleImageEvaluator(BaseEvaluator):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_test = make_dl.get_data_loader_test(bs)
 
         features_real = []
@@ -423,7 +423,7 @@ class SingleImageEvaluator(BaseEvaluator):
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_test = make_dl.get_data_loader_test(bs)
 
         embeddings_real = []
@@ -465,7 +465,7 @@ class SingleImageEvaluator(BaseEvaluator):
         path = self._config['dataset']['path']
         anno = self._config['dataset']['anno']
         size = self._config['dataset']['size']
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_test = make_dl.get_data_loader_test(bs)
 
         target_measures = get_measures_dataloader(dl_test)
@@ -493,7 +493,7 @@ class SingleImageEvaluator(BaseEvaluator):
         path = self.config['dataset']['path']
         anno = self.config['dataset']['anno']
         size = self.config['dataset']['size']
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(bs)
 
         n_out = self.config['dataset']['n_out']
@@ -550,7 +550,7 @@ class SingleImageEvaluator(BaseEvaluator):
         n_workers = self._config['n_workers']
         bs = self._config['batch_size']
 
-        make_dl = MakeDataLoader(path, anno, size, N_sample=-1, augmented=False)
+        make_dl = MakeDataLoader(path, anno, size, augmented=False)
         dl_val = make_dl.get_data_loader_valid(batch_size=bs, shuffle=False,
                                                num_workers=n_workers)
         dl_test = make_dl.get_data_loader_test(batch_size=bs, shuffle=False,
@@ -562,7 +562,7 @@ class SingleImageEvaluator(BaseEvaluator):
                                                                      self._autoencoder,
                                                                      N_cluster=n_cluster,
                                                                      batch_size=bs)
-        res = {**res_clusters, **res_wasserstein, 'n_cluster': n_cluster}
+        res = {**{'cluster': res_clusters}, **{'wassetstein': res_wasserstein}, 'n_cluster': n_cluster}
         return res
 
     def _load_model(self):
