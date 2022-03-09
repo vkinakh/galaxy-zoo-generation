@@ -58,22 +58,54 @@ class DistributionEvaluation:
                   if not key == "reference"}
         return errors
 
-    def get_distances(self, squared: bool = True):
-        """ get average (squared) distance to cluster centers in every cluster for all distributions. """
-        distances = {key: compute_distances(clusters, self.distance_transforms[key], self.N_clusters, squared=squared)
+    # def get_distances(self, squared: bool = True):
+    #     """ get average (squared) distance to cluster centers in every cluster for all distributions. """
+    #     distances = {key: compute_distances(clusters, self.distance_transforms[key], self.N_clusters, squared=squared)
+    #                  for key, clusters in self.predictions.items()
+    #                  if not key == "reference"}
+    #     return distances
+
+    def get_distances(self, squared: bool = True, combined: bool = True, std: bool = True):
+        """ get (combined) average (squared) distance to cluster centers (and standard deviation) for every cluster for all distributions. """
+        distances = {key: compute_distances(clusters, self.distance_transforms[key], self.N_clusters, squared=squared, combined=combined, std=std)
                      for key, clusters in self.predictions.items()
                      if not key == "reference"}
         return distances
 
-    def get_mean_distance(self, squared: bool = True):
+    # def get_mean_distance(self, squared: bool = True):
+    #     """ get average (squared) distance to cluster centers over all clusters for all distributions. """
+    #     distances = self.get_distances(squared=squared)
+    #     distances = {key: np.nanmean(value) for key, value in distances.items()} # this requires nanmean, for clusters may be empty -> NaN distance
+    #     return distances
+
+    def get_mean_distance(self, squared: bool = True, combined: bool = True, std: bool = True):
         """ get average (squared) distance to cluster centers over all clusters for all distributions. """
-        distances = self.get_distances(squared=squared)
-        distances = {key: np.nanmean(value) for key, value in distances.items()} # this requires nanmean, for clusters may be empty -> NaN distance
+        distances = self.get_distances(squared=squared, combined=combined, std=std)
+#        distances = {key: np.nanmean(value) for key, value in distances.items()} # this requires nanmean, for clusters may be empty -> NaN distance
         return distances
 
+# def compute_distances(clusters: np.array, distances: np.array, N_clusters: int, squared: bool = True):
+#     """ return average distance to center for data points in every cluster.
+#     Parameters
+#     ----------
+#     clusters : iterable
+#         contains clusters each data point belongs to.
+#     distances : numpy.array
+#         contains distances from each data point to each cluster center.
+#     N_clusters : int
+#         number of clusters
+#     squared : bool, default=True
+#         if True, compute RMS
+#     """
+#     distances = distances.min(1)  # distance to nearest cluster center
+#     if squared:
+#         distances = distances * distances
+#     average_distances = [np.mean(distances[clusters == cluster])**(1-0.5*squared) for cluster in range(N_clusters)]
+#     return average_distances
 
-def compute_distances(clusters: np.array, distances: np.array, N_clusters: int, squared: bool = True):
-    """ return average distance to center for data points in every cluster.
+
+def compute_distances(clusters: np.array, distances: np.array, N_clusters: int, squared: bool = True, std: bool = True, combined: bool = False):
+    """ return for each cluster the average distance of data points to cluster center.
     Parameters
     ----------
     clusters : iterable
@@ -84,12 +116,26 @@ def compute_distances(clusters: np.array, distances: np.array, N_clusters: int, 
         number of clusters
     squared : bool, default=True
         if True, compute RMS
+    std : bool, default=True
+        if True, return standard deviation as well
+    combined : bool, default=True
+        if True, return average distance and standard deviation combined for all clusters
     """
     distances = distances.min(1)  # distance to nearest cluster center
     if squared:
         distances = distances * distances
-    average_distances = [np.mean(distances[clusters == cluster])**(1-0.5*squared) for cluster in range(N_clusters)]
-    return average_distances
+    if combined:
+        average_distance = np.nanmean(distances)**(1-0.5*squared)
+    else:
+        average_distance = [np.nanmean(distances[clusters == cluster])**(1-0.5*squared) for cluster in range(N_clusters)]
+    if not std:
+        return average_distance
+    if combined:
+        standard_deviation = np.nanmean(np.abs(distances**(1-0.5*squared) - average_distance))
+    else:
+        standard_deviation = [np.nanmean(np.abs(distances[clusters == cluster]**(1-0.5*squared) - avg_dist))
+                              for cluster, avg_dist in enumerate(average_distance)]
+    return average_distance, standard_deviation
 
 
 def compute_l1_distance(reference, values, div=1):

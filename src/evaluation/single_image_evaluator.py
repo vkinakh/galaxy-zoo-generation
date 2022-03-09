@@ -561,7 +561,8 @@ class SingleImageEvaluator(BaseEvaluator):
                                                                      dl_test, dl_val,
                                                                      self._autoencoder,
                                                                      N_cluster=n_cluster,
-                                                                     batch_size=bs)
+                                                                     batch_size=bs,
+                                                                     name='Single image')
         res = {**{'cluster': res_clusters}, **{'wassetstein': res_wasserstein}, 'n_cluster': n_cluster}
         return res
 

@@ -565,7 +565,8 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         res_clusters, res_wasserstein = evaluate_latent_distribution(self._g_ema,
                                                                      dl_test, dl_val, encoder,
                                                                      N_cluster=n_cluster,
-                                                                     batch_size=bs)
+                                                                     batch_size=bs,
+                                                                     name='InfoSCC-GAN')
         res = {**{"cluster": res_clusters}, **{"wasserstein": res_wasserstein}, 'n_cluster': n_cluster}
         return res
 
