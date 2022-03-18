@@ -6,7 +6,6 @@ Encoder from VAE has to be trained on similar kinds of images
 from functools import partial
 from tqdm import tqdm
 import numpy as np
-from sklearn.metrics import normalized_mutual_info_score, adjusted_mutual_info_score, mutual_info_score, adjusted_rand_score
 
 import torch
 import torch.nn as nn
@@ -43,26 +42,10 @@ def evaluate_latent_distribution(generator: nn.Module,
     results_wasserstein[name] = wasser(data_generated, data_reference)
     distribution_evaluation.process(True)
 
-    pred_gt = distribution_evaluation.predictions['ground truth']
-    pred_ref = distribution_evaluation.predictions['reference']
-    pred_gen = distribution_evaluation.predictions[name]
-
-    pred_gen_fixed = [0] * len(pred_gt)
-    pred_gen_fixed[:len(pred_gen)] = pred_gen
-
     results_clusters = {
         "histograms": distribution_evaluation.histograms,
         "errors": distribution_evaluation.get_errors(),
-        "distances": distribution_evaluation.get_mean_distance(),
-        'normalized_mutual_info_score': normalized_mutual_info_score(pred_gt, pred_gen_fixed),
-        'adjusted_mutual_info_score': adjusted_mutual_info_score(pred_gt, pred_gen_fixed),
-        'mutual_info_score': mutual_info_score(pred_gt, pred_gen_fixed),
-        'adjusted_rand_score': adjusted_rand_score(pred_gt, pred_gen_fixed),
-
-        'baseline_normalized_mutual_info_score': normalized_mutual_info_score(pred_gt, pred_ref),
-        'baseline_adjusted_mutual_info_score': adjusted_mutual_info_score(pred_gt, pred_ref),
-        'baseline_mutual_info_score': mutual_info_score(pred_gt, pred_ref),
-        'baseline_adjusted_rand_score': adjusted_rand_score(pred_gt, pred_ref)
+        "distances": distribution_evaluation.get_distances(combined=True),
     }
     return results_clusters, results_wasserstein
 
