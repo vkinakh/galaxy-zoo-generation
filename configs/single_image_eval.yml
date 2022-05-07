@@ -4,8 +4,8 @@ n_workers: 16
 
 dataset:            # dataset parameters
   name: galaxy_zoo  # dataset name
-  path: <> # path to folder with images
-  anno: <> # path to file with attribute annotations
+  path: <>          # path to folder with images
+  anno: <>          # path to file with attribute annotations
   size: 64          # image size
   n_out: 37         # number of attributes for each image
   n_channels: 3     # number of channels in image
@@ -21,6 +21,6 @@ autoencoder:                                              # autoencoder, used fo
 classifier:   # classifier, used for attribute control accuracy
     path: ./models/classifier/parameter_state_dict_ImageClassifier.pth
 
-n_clusters: 5  # number of cluster for cluster features
+n_clusters: 10  # number of cluster for cluster features
 
 comment: single_image_eval

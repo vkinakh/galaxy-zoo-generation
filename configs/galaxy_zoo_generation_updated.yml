@@ -12,7 +12,7 @@ n_workers: 16        # number of workers in dataloader
 lr: 1e-4             # learning rate
 fid: True            # if True, then FID will be calculated when saving checkpoint model
 
-fine_tune_from: # path to model, to fine tune from
+fine_tune_from:      # path to model, to fine tune from
 
 loss: lsgan  # type of loss to use. Options: 'hinge', 'non_saturating' and 'lsgan'
 
@@ -40,14 +40,14 @@ generator:             # generator parameters
   y_type: real         # type of attributes
 
 discriminator:    # discriminator parameters
-  type: global     # type of discriminator. Choices: 'global' and 'patch'
+  type: patch     # type of discriminator. Choices: 'global' and 'patch'
   actnorm: False
   ndf: 64
   n_layers: 4
 
 eval:           # evaluation parameters
   path_encoder: ./models/cVAE/parameter_state_dict_Encoder.pth   # path to autoencoder, used for evaluation
-  n_clusters: 5                                                  # number of clusters used for evaluation
+  n_clusters: 10                                                  # number of clusters used for evaluation
   path_classifier: ./models/classifier/parameter_state_dict_ImageClassifier.pth   # path to classifier for evaluation
 
 comment: galaxy_zoo_generation
