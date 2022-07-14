@@ -1,12 +1,35 @@
 from argparse import ArgumentParser
 from functools import partial
 import json
+from collections import namedtuple
+from pprint import pprint
 
 from tqdm import trange
 import numpy as np
 
 from src.trainer import GalaxyZooInfoSCC_Trainer
 from src.utils import get_config
+
+
+MeanStddev = namedtuple("Mean", "Mean Stddev")
+
+
+def get_mean_dicts(dicts, keys=None):
+    if keys is None:
+        keys = []
+    values = np.array([[d[k] for d in dicts] for k in keys])
+    return {k: MeanStddev(v, s) for k, v, s in zip(keys, values.mean(axis=1), values.std(axis=1))}
+
+
+def get_mean_nested_dicts(dicts, keys=None):
+    if keys is None:
+        keys = []
+    results = {}
+    for k in keys:
+        sub_dicts = [d[k] for d in dicts]
+        result = get_mean_dicts(sub_dicts, keys=sub_dicts[0].keys())
+        results[k] = result
+    return results
 
 
 def main(args):
@@ -28,7 +51,6 @@ def main(args):
         'PPL SSL': partial(trainer._compute_ppl, encoder_type='simclr'),
         'PPL VGG': partial(trainer._compute_ppl, encoder_type='vgg'),
         'PPL AE': partial(trainer._compute_ppl, encoder_type='ae'),
-
         'KID IV3': partial(trainer._compute_kid, encoder_type='inception'),
         'KID SSL': partial(trainer._compute_kid, encoder_type='simclr'),
         'KID AE': partial(trainer._compute_kid, encoder_type='ae'),
@@ -39,9 +61,14 @@ def main(args):
         'Geom dist AE': partial(trainer._compute_geometric_distance, encoder_type='ae'),
 
         'ACA': partial(trainer._attribute_control_accuracy, build_hist=False),
+
+        'cluster': trainer._compute_distribution_measures,
     }
 
     results = {}
+    results_clusters = []
+    results_wasserstein = []
+
     for name, method in eval_methods.items():
         for _ in trange(n, desc=name):
             val = method()
@@ -58,6 +85,11 @@ def main(args):
                     results[name] = []
 
                 results[name].append(val['aggregated_attribute_accuracy'])
+            elif name == 'cluster':
+                results_clusters.append(val['cluster'])
+
+                res_wasserstein = val['wasserstein']
+                results_wasserstein.append(res_wasserstein)
             else:
                 if name not in results:
                     results[name] = []
@@ -66,7 +98,14 @@ def main(args):
     for name, vals in results.items():
         print(f'Method: {name}. Mean: {np.mean(vals)}, STD: {np.std(vals)}')
 
-    with open('./runs/results_morph.json', 'w') as f:
+    result_clusters = get_mean_nested_dicts(results_clusters, keys=['distances', 'errors'])
+    result_wasserstein = get_mean_dicts(results_wasserstein, keys=res_wasserstein.keys())
+    print('clusters')
+    pprint(result_clusters)
+    print('Wasserstein')
+    pprint(result_wasserstein)
+
+    with open('./runs/results.json', 'w') as f:
         json.dump(str(results), f)
 
 

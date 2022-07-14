@@ -567,7 +567,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
                                                                      N_cluster=n_cluster,
                                                                      batch_size=bs,
                                                                      name='InfoSCC-GAN')
-        res = {**{"cluster": res_clusters}, **{"wasserstein": res_wasserstein}, 'n_cluster': n_cluster}
+        res = {**{'cluster': res_clusters}, **{'wasserstein': res_wasserstein}, 'n_cluster': n_cluster}
         return res
 
     @torch.no_grad()
@@ -681,7 +681,7 @@ class GalaxyZooInfoSCC_Trainer(GeneratorTrainer):
         embeddings_real = np.array(embeddings_real, dtype=np.float32)
         embeddings_gen = np.array(embeddings_gen, dtype=np.float32)
         embeddings = np.concatenate((embeddings_real, embeddings_gen))
-        tsne_emb = TSNE(n_components=3, n_jobs=16).fit_transform(embeddings)
+        tsne_emb = TSNE(n_components=3, n_jobs=16, random_state=0).fit_transform(embeddings)
 
         n = len(tsne_emb)
         tsne_real = np.array(tsne_emb[:n//2, ], dtype=np.float32)
