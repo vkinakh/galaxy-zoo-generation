@@ -105,8 +105,10 @@ def main(args):
     print('Wasserstein')
     pprint(result_wasserstein)
 
-    with open('./runs/results.json', 'w') as f:
+    with open('./runs/results_mean_std_13_clusters.json', 'w') as f:
         json.dump(str(results), f)
+        json.dump(str(result_clusters), f)
+        json.dump(str(result_wasserstein), f)
 
 
 if __name__ == '__main__':
