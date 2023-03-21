@@ -1,7 +1,12 @@
+![Python 3.9](https://img.shields.io/badge/python-3.8-green.svg)
+
 # Evaluation Metrics for Galaxy Image Generators
 ## Galaxy Zoo generation using information-theoretic stochastic contrastive conditional GAN: InfoSCC-GAN
 
 This repo contains the code for the paper: "[Evaluation Metrics for Galaxy Image Generators](http://dx.doi.org/10.2139/ssrn.4276472)". Pytorch implementation of the Galaxy Zoo generation using InfoSCC-GAN framework.
+
+Check out our [Hugginface Space](https://huggingface.co/spaces/vitaliykinakh/Galaxy_Zoo_Generation)
+
 
 ## Installation
 ### Conda installation
