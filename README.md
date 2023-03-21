@@ -1,4 +1,4 @@
-![Python 3.9](https://img.shields.io/badge/python-3.8-green.svg)
+![Python 3.8](https://img.shields.io/badge/python-3.8-green.svg)
 
 # Evaluation Metrics for Galaxy Image Generators
 ## Galaxy Zoo generation using information-theoretic stochastic contrastive conditional GAN: InfoSCC-GAN
