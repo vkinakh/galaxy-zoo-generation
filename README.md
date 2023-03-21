@@ -1,7 +1,7 @@
 # Evaluation Metrics for Galaxy Image Generators
 ## Galaxy Zoo generation using information-theoretic stochastic contrastive conditional GAN: InfoSCC-GAN
 
-This repo contains the code for the paper: "Evaluation Metrics for Galaxy Image Generators". Pytorch implementation of the Galaxy Zoo generation using InfoSCC-GAN framework.
+This repo contains the code for the paper: "[Evaluation Metrics for Galaxy Image Generators](http://dx.doi.org/10.2139/ssrn.4276472)". Pytorch implementation of the Galaxy Zoo generation using InfoSCC-GAN framework.
 
 ## Installation
 ### Conda installation
@@ -96,3 +96,16 @@ python evaluate_single_image_generator.py --config <path to config>
 |Classifier (for training of the generator)|[Download](https://drive.google.com/file/d/1B9SMUFFldvDEgHrUQVmFTPSxuiRZ3sfk/view?usp=sharing)|
 |Autoencoder|[Download](https://drive.google.com/file/d/1WTj-x3LjbIufdypnr4GQD1bzYyyPPAY4/view?usp=sharing)|
 |Classifier (for evaluation)|[Download](https://drive.google.com/file/d/1Ogjajeo5KH5mhaHseNsNVMfHfI3GG7Kd/view?usp=sharing)|
+
+
+## Citation
+```bash
+@article{hackstein2023evaluation,
+  title={Evaluation metrics for galaxy image generators},
+  author={Hackstein, Stefan and Kinakh, Vitaliy and Bailer, Christian and Melchior, Martin},
+  journal={Astronomy and Computing},
+  pages={100685},
+  year={2023},
+  publisher={Elsevier}
+}
+```

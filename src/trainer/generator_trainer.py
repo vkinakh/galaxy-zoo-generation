@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, NoReturn, Optional
+from typing import Dict, Optional
 from PIL import Image
 import random
 
